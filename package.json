@@ -1,0 +1,152 @@
+{
+  "name": "multiwindowmanager",
+  "displayName": "multiWindowManager",
+  "description": "",
+  "version": "0.0.1",
+  "engines": {
+    "vscode": "^1.109.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": ["*"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "multiwindowmanager.windowsView",
+          "name": "Window / Project Manager"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "multiWindowManager",
+      "properties": {
+        "multiwindowmanager.preferDaemon": {
+          "type": "boolean",
+          "default": false,
+          "description": "When true, prefer a local daemon file as authoritative source (if available)."
+        },
+        "multiwindowmanager.daemonFile": {
+          "type": "string",
+          "default": "~/.vscode-window-daemon.json",
+          "description": "Path to a local daemon JSON file (tilde expanded)."
+        },
+        "multiwindowmanager.trackerDir": {
+          "type": "string",
+          "default": "~/.vscode-window-tracker",
+          "description": "Fallback directory containing tracker JSON files."
+        },
+        "multiwindowmanager.idleThresholdMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Minutes of inactivity before a window is considered 'idle'."
+        },
+        "multiwindowmanager.heartbeatIntervalSeconds": {
+          "type": "number",
+          "default": 5,
+          "minimum": 1,
+          "description": "Heartbeat interval in seconds for refreshing the view."
+        },
+        "multiwindowmanager.groupThreshold": {
+          "type": "number",
+          "default": 200,
+          "minimum": 10,
+          "description": "When number of windows exceeds this threshold, view groups by state."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "multiwindowmanager.refresh",
+        "title": "Refresh",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "multiwindowmanager.switch",
+        "title": "Switch"
+      },
+      {
+        "command": "multiwindowmanager.openNewWindow",
+        "title": "Open New Window"
+      },
+      {
+        "command": "multiwindowmanager.newFolder",
+        "title": "New Folder"
+      },
+      {
+        "command": "multiwindowmanager.reveal",
+        "title": "Reveal"
+      },
+      {
+        "command": "multiwindowmanager.copyPath",
+        "title": "Copy Path"
+      },
+      {
+        "command": "multiwindowmanager.togglePin",
+        "title": "Pin / Unpin"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "multiwindowmanager.refresh",
+          "when": "view == multiwindowmanager.windowsView",
+          "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "multiwindowmanager.switch",
+          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
+          "group": "inline@1"
+        },
+        {
+          "command": "multiwindowmanager.openNewWindow",
+          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
+          "group": "inline@2"
+        },
+        {
+          "command": "multiwindowmanager.togglePin",
+          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
+          "group": "1_main@1"
+        },
+        {
+          "command": "multiwindowmanager.newFolder",
+          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
+          "group": "1_main@2"
+        },
+        {
+          "command": "multiwindowmanager.reveal",
+          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
+          "group": "1_main@3"
+        },
+        {
+          "command": "multiwindowmanager.copyPath",
+          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
+          "group": "2_clipboard@1"
+        }
+      ]
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile && npm run lint",
+    "lint": "eslint src",
+    "test": "vscode-test"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.109.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "22.x",
+    "typescript-eslint": "^8.54.0",
+    "eslint": "^9.39.2",
+    "typescript": "^5.9.3",
+    "@vscode/test-cli": "^0.0.12",
+    "@vscode/test-electron": "^2.5.2"
+  }
+}
