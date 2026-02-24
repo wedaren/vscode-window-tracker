@@ -10,7 +10,12 @@
 			"type": "extensionHost",
 			"request": "launch",
 			"args": [
-				"--extensionDevelopmentPath=${workspaceFolder}"
+				"--extensionDevelopmentPath=${workspaceFolder}",
+				"--profile",
+				"空白",
+				"--user-data-dir",
+				"${workspaceFolder}/.vscode-blank-profile",
+				"/Users/wedaren/repositoryDestinationOfGithub"
 			],
 			"outFiles": [
 				"${workspaceFolder}/out/**/*.js"

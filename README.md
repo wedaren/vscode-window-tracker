@@ -1,25 +1,34 @@
-# multiWindowManager
+# vscode-window-tracker
 
-用于可视化管理 VS Code 窗口/项目状态的 TreeView 扩展。
+用于可视化管理 VS Code 窗口/工作区快照的 TreeView 扩展。
 
 ## 已实现能力（MVP）
 
-- TreeView 视图：`Window / Project Manager`
-- 状态模型：`focused` / `visible` / `idle` + `pinned`
-- 视觉映射：
-	- `focused`：`eye`（蓝色强调）
-	- `visible`：`eye`
-	- `idle`：弱化图标（`circle-large-outline`）
-	- `pinned`：`pin`
-- 右侧描述显示短路径与相对时间：`now / 5m / 2h / 1d`
-- Tooltip 展示 metadata：`title`、`path`、`pid`、`lastActive`、`source`、`status`
-- 操作命令：`Switch`、`Open New Window`、`New Folder`、`Reveal`、`Copy Path`、`Pin / Unpin`
-- 数据源：
-	- 优先读取 `~/.vscode-window-tracker/*.json`
-	- 同时注入当前 workspace 记录
-	- 去重规则：`uri+windowId` -> `uri+pid` -> `title`（模糊）
-- 更新策略：5s 心跳刷新 + 差异哈希，避免不必要重绘
-- 大量窗口（>200）自动按状态分组折叠
+- TreeView 视图：`Window Tracker`（view id: `vscode-window-tracker.windowsView`）
+- 状态模型：`focused` / `visible` / `idle`（当前代码未实现 `pinned` 功能）
+- 视觉映射（实现要点）：
+	- `focused`：以强调色显示（实现中使用主题图标/高亮）
+	- `visible`：中性图标
+	- `idle`：次要/空心图标（如 `circle-large-outline`）
+- 右侧描述显示短路径与相对时间：`now / 5m / 2h / 1d`（实现为 `description` 字段，短路径 + 相对时间）
+- Tooltip 展示 metadata：`title`、`path`、`pid`、`lastActive`、`source`、`status`（实现为 `MarkdownString`）
+- 已实现的命令（扩展实际注册）：
+	- `vscode-window-tracker.refresh` — 强制刷新视图
+	- `vscode-window-tracker.reveal` — 在新窗口中打开对应目录（内部使用 `vscode.openFolder`）
+	- `vscode-window-tracker.addProject` — 通过选择文件夹或手动添加到“已添加项目”列表
+	- `vscode-window-tracker.removeProject` — 从“已添加项目”中移除
+- 注意：`copyPath` / `pin` / `switch` / `new folder` 等在 `package.json` 中可能有贡献项或初始设计，但当前源码未注册或实现这些命令/功能。
+
+- 数据来源与去重：
+	- 可配置优先使用 daemon 文件（`vscode-window-tracker.preferDaemon`, `vscode-window-tracker.daemonFile`）。
+	- 回退读取 tracker 目录（默认 `~/.vscode-window-tracker`）下的 JSON 文件，并合并当前 workspace 快照。
+	- 去重键由 `DataManager.buildDedupKeys` 生成，优先级为 `uri+windowId` -> `uri+pid` -> `title`，`dedupe` 保留最近活动记录。
+
+- 更新与持久化：
+	- 扩展在激活时会写入当前会话的 tracker 文件（原子写入），并以配置 `vscode-window-tracker.heartbeatIntervalSeconds`（默认 5s）进行心跳刷新。
+	- 激活时可清理过期的 tracker 文件（`vscode-window-tracker.trackerAutoCleanup` 与 `trackerFileStaleMinutes` 配置）。
+
+- 性能：实现了 `groupThreshold`（配置键 `vscode-window-tracker.groupThreshold`，默认 200），当窗口数量较大时在顶层展示状态分组以减少渲染压力。
 
 ## 运行与调试
 
@@ -38,15 +47,14 @@ npm run compile
 3. 启动扩展调试
 
 - 在 VS Code 中按 `F5` 打开 Extension Development Host
-- 在资源管理器中查看 `Window / Project Manager`
+- 在侧边栏中查看 `Window Tracker` 视图
 
 ## 说明
 
-- `Open New Window` 使用 VS Code 命令：
+- `Reveal`（在新窗口打开）使用：
 
 ```ts
-await vscode.commands.executeCommand('vscode.openFolder', dirUri, { forceNewWindow: true });
+await vscode.commands.executeCommand('vscode.openFolder', dirUri, true);
 ```
 
-- `Switch` 使用同一命令并复用当前窗口（`forceNewWindow: false`）。
-- 若无辅助权限或无 tracker 数据，仍可通过当前 workspace 记录正常使用基础能力。
+- 如果你想让我把 README 中的“未实现”命令（如 `copyPath`）补充为真实实现，我可以继续实现并注册相应命令。

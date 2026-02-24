@@ -1,6 +1,6 @@
 {
-  "name": "multiwindowmanager",
-  "displayName": "multiWindowManager",
+  "name": "vscode-window-tracker",
+  "displayName": "vscode-window-tracker",
   "description": "",
   "version": "0.0.1",
   "engines": {
@@ -12,121 +12,129 @@
   "activationEvents": ["*"],
   "main": "./out/extension.js",
   "contributes": {
-    "views": {
-      "explorer": [
+    "viewsContainers": {
+      "activitybar": [
         {
-          "id": "multiwindowmanager.windowsView",
-          "name": "Window / Project Manager"
+          "id": "vscode-window-tracker-container",
+          "title": "Window Tracker",
+          "icon": "resources/project-manager.svg"
+        }
+      ]
+    },
+    "views": {
+      "vscode-window-tracker-container": [
+        {
+          "id": "vscode-window-tracker.windowsView",
+          "name": "Window Tracker"
         }
       ]
     },
     "configuration": {
-      "title": "multiWindowManager",
+      "title": "vscode-window-tracker",
       "properties": {
-        "multiwindowmanager.preferDaemon": {
+        "vscode-window-tracker.preferDaemon": {
           "type": "boolean",
           "default": false,
           "description": "When true, prefer a local daemon file as authoritative source (if available)."
         },
-        "multiwindowmanager.daemonFile": {
+        "vscode-window-tracker.daemonFile": {
           "type": "string",
           "default": "~/.vscode-window-daemon.json",
           "description": "Path to a local daemon JSON file (tilde expanded)."
         },
-        "multiwindowmanager.trackerDir": {
+        "vscode-window-tracker.trackerDir": {
           "type": "string",
           "default": "~/.vscode-window-tracker",
           "description": "Fallback directory containing tracker JSON files."
         },
-        "multiwindowmanager.idleThresholdMinutes": {
+        "vscode-window-tracker.idleThresholdMinutes": {
           "type": "number",
           "default": 30,
           "minimum": 1,
           "description": "Minutes of inactivity before a window is considered 'idle'."
         },
-        "multiwindowmanager.heartbeatIntervalSeconds": {
+        "vscode-window-tracker.heartbeatIntervalSeconds": {
           "type": "number",
           "default": 5,
           "minimum": 1,
           "description": "Heartbeat interval in seconds for refreshing the view."
         },
-        "multiwindowmanager.groupThreshold": {
+        "vscode-window-tracker.groupThreshold": {
           "type": "number",
           "default": 200,
           "minimum": 10,
           "description": "When number of windows exceeds this threshold, view groups by state."
         }
+        ,
+        "vscode-window-tracker.trackerFileStaleMinutes": {
+          "type": "number",
+          "default": 30,
+          "minimum": 1,
+          "description": "Ignore tracker files whose lastActive is older than this many minutes."
+        },
+        "vscode-window-tracker.trackerAutoCleanup": {
+          "type": "boolean",
+          "default": true,
+          "description": "When true, remove stale tracker files from the tracker directory on activation."
+        }
       }
     },
     "commands": [
       {
-        "command": "multiwindowmanager.refresh",
+        "command": "vscode-window-tracker.refresh",
         "title": "Refresh",
         "icon": "$(refresh)"
       },
       {
-        "command": "multiwindowmanager.switch",
-        "title": "Switch"
+        "command": "vscode-window-tracker.reveal",
+        "title": "Reveal",
+        "icon": "$(eye)"
       },
       {
-        "command": "multiwindowmanager.openNewWindow",
-        "title": "Open New Window"
+        "command": "vscode-window-tracker.copyPath",
+        "title": "Copy Path",
+        "icon": "$(copy)"
       },
       {
-        "command": "multiwindowmanager.newFolder",
-        "title": "New Folder"
+        "command": "vscode-window-tracker.addProject",
+        "title": "Add Project",
+        "icon": "$(add)"
       },
       {
-        "command": "multiwindowmanager.reveal",
-        "title": "Reveal"
-      },
-      {
-        "command": "multiwindowmanager.copyPath",
-        "title": "Copy Path"
-      },
-      {
-        "command": "multiwindowmanager.togglePin",
-        "title": "Pin / Unpin"
+        "command": "vscode-window-tracker.removeProject",
+        "title": "Remove Project",
+        "icon": "$(trash)"
       }
     ],
     "menus": {
       "view/title": [
         {
-          "command": "multiwindowmanager.refresh",
-          "when": "view == multiwindowmanager.windowsView",
+          "command": "vscode-window-tracker.refresh",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        }
+        ,
+        {
+          "command": "vscode-window-tracker.addProject",
+          "when": "view == vscode-window-tracker.windowsView",
           "group": "navigation"
         }
       ],
       "view/item/context": [
         {
-          "command": "multiwindowmanager.switch",
-          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
+          "command": "vscode-window-tracker.reveal",
+          "when": "viewItem =~ /windowItem(:|$)/ && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
         },
         {
-          "command": "multiwindowmanager.openNewWindow",
-          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
-          "group": "inline@2"
+          "command": "vscode-window-tracker.addProject",
+          "when": "viewItem == 'windowItem:tracked:allowAdd' && view == vscode-window-tracker.windowsView",
+          "group": "inline@1"
         },
         {
-          "command": "multiwindowmanager.togglePin",
-          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
-          "group": "1_main@1"
-        },
-        {
-          "command": "multiwindowmanager.newFolder",
-          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
-          "group": "1_main@2"
-        },
-        {
-          "command": "multiwindowmanager.reveal",
-          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
-          "group": "1_main@3"
-        },
-        {
-          "command": "multiwindowmanager.copyPath",
-          "when": "view == multiwindowmanager.windowsView && viewItem == windowItem",
-          "group": "2_clipboard@1"
+          "command": "vscode-window-tracker.removeProject",
+          "when": "viewItem == 'windowItem:added' && view == vscode-window-tracker.windowsView",
+          "group": "inline@1"
         }
       ]
     }
