@@ -1,6 +1,7 @@
 {
   "name": "vscode-window-tracker",
   "displayName": "vscode-window-tracker",
+  "publisher": "wedaren",
   "description": "",
   "version": "0.0.1",
   "engines": {
