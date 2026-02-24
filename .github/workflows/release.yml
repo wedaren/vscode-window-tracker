@@ -48,18 +48,7 @@ jobs:
         run: |
           vsce package -o extension.vsix
 
-      - name: Create GitHub Release
-        id: create_release
-        uses: actions/create-release@v1
-        with:
-          tag_name: ${{ github.ref_name }}
-          release_name: ${{ github.ref_name }}
-          draft: false
-          prerelease: false
-        env:
-          # Prefer a repo-scoped personal access token stored as RELEASE_TOKEN.
-          # Please add a secret named 'RELEASE_TOKEN' (repo scope) in repository settings.
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+      # Create GitHub Release step removed — handled externally if needed.
 
       # Uploading VSIX to the GitHub release removed — handled externally if needed.
 
