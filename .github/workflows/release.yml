@@ -65,9 +65,12 @@ jobs:
           asset_content_type: application/octet-stream
 
       - name: Publish to Visual Studio Marketplace (optional)
-        if: ${{ secrets.VSCE_TOKEN != '' }}
         env:
           VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
         run: |
           # publish requires a 'publisher' field in package.json and a PAT stored in VSCE_TOKEN
-          vsce publish --pat $VSCE_TOKEN
+          if [ -n "$VSCE_TOKEN" ]; then
+            vsce publish --pat "$VSCE_TOKEN"
+          else
+            echo "VSCE_TOKEN not set; skipping publish"
+          fi
