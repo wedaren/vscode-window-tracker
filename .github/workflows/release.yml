@@ -61,16 +61,7 @@ jobs:
           # Please add a secret named 'RELEASE_TOKEN' (repo scope) in repository settings.
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
-      - name: Upload VSIX to Release
-        uses: actions/upload-release-asset@v1
-        env:
-          # Use the same PAT as above. Add 'RELEASE_TOKEN' secret if not present.
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
-        with:
-          upload_url: ${{ steps.create_release.outputs.upload_url }}
-          asset_path: ./extension.vsix
-          asset_name: extension.vsix
-          asset_content_type: application/octet-stream
+      # Uploading VSIX to the GitHub release removed — handled externally if needed.
 
       - name: Publish to Visual Studio Marketplace (optional)
         env:
