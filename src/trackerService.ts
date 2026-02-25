@@ -16,7 +16,7 @@ export class TrackerService {
     private boundExitHandler: () => void;
     private boundSigintHandler: () => void;
     private boundSigtermHandler: () => void;
-    private boundUncaughtHandler: () => void;
+    private boundUncaughtHandler: (error: Error) => void;
 
     // allow injecting an fs-like implementation for testing
     private readonly fsImpl: typeof fs;
@@ -33,10 +33,23 @@ export class TrackerService {
 
         this.trackerFilePath = this.context.globalState.get<string>('vscode-window-tracker.trackerFile');
 
-        this.boundExitHandler = () => { void this.removeNow(); };
-        this.boundSigintHandler = () => { void this.removeNow(); process.exit(130); };
-        this.boundSigtermHandler = () => { void this.removeNow(); process.exit(137); };
-        this.boundUncaughtHandler = () => { void this.removeNow(); process.exit(1); };
+        this.boundExitHandler = () => {
+            if (this.trackerFilePath) {
+            try {
+                // The 'exit' handler must be synchronous.
+                require('fs').unlinkSync(this.trackerFilePath);
+            } catch {
+                // ignore, file might not exist
+            }
+            }
+        };
+        this.boundSigintHandler = () => { process.exit(130); };
+        this.boundSigtermHandler = () => { process.exit(137); };
+        this.boundUncaughtHandler = (error: Error) => {
+            // eslint-disable-next-line no-console
+            console.error('Uncaught exception:', error);
+            process.exit(1);
+        };
     }
 
     start(): void {
