@@ -1,78 +1,101 @@
+# 自动构建和发布 VS Code 扩展工作流
 name: Build and Publish VSIX
 
+# 触发条件：当推送到 main 分支且以下文件发生变化时触发
 on:
   push:
     branches:
       - main
     paths:
-      - 'src/**'
-      - 'package.json'
-      - '.github/workflows/release.yml'
+      - 'src/**'           # 源代码变化
+      - 'package.json'     # 配置文件变化
+      - '.github/workflows/release.yml'  # 工作流本身变化
 
+# GitHub Actions 权限配置
 permissions:
-  contents: write
+  contents: write  # 允许写入仓库内容（创建 release、提交等）
 
 jobs:
+  # 构建和发布任务
   build-and-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # 在 Linux 环境运行
     steps:
+      # ============ 第1步：检出代码 ============
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # 获取完整历史，便于版本管理
+          token: ${{ secrets.GITHUB_TOKEN }}  # 使用 GitHub token 以支持标签操作
 
+      # ============ 第2步：配置 Git 用户信息 ============
       - name: Configure git
         run: |
+          # 配置为 GitHub Actions 机器人账户（用于自动提交）
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      # ============ 第3步：配置 Node.js 环境 ============
       - name: Set up Node
         uses: actions/setup-node@v4
         with:
           node-version: '20'
 
+      # ============ 第4步：安装项目依赖 ============
       - name: Install dependencies
-        run: npm ci
+        run: npm ci  # 使用 npm ci 确保依赖版本一致性
 
+      # ============ 第5步：自动版本管理 ============
       - name: Bump version and create tag
-        id: version_bump
+        id: version_bump  # 输出结果供后续步骤使用
         run: |
+          # 读取当前版本号
           CURRENT_VERSION=$(node -p "require('./package.json').version")
           echo "old_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
           
+          # 自动升级补丁版本 (patch) 例如: 0.0.2 → 0.0.3
           npm version patch --no-git-tag-version
           
+          # 读取新版本号
           NEW_VERSION=$(node -p "require('./package.json').version")
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           
+          # 提交版本变更
           git add package.json package-lock.json
           git commit -m "chore: release v$NEW_VERSION"
+          
+          # 创建版本标签
           git tag "v$NEW_VERSION"
           
           echo "✓ Version bumped: $CURRENT_VERSION → $NEW_VERSION"
 
+      # ============ 第6步：推送提交和标签 ============
       - name: Push changes and tags
         run: |
-          git push origin main
+          # 推送版本提交到 main 分支（使用 HEAD:main 避免标签冲突）
+          git push origin HEAD:main
+          # 推送所有版本标签
           git push origin "v${{ steps.version_bump.outputs.new_version }}"
 
+      # ============ 第7步：编译 TypeScript 代码 ============
       - name: Compile
         run: npm run compile
 
+      # ============ 第8步：安装 vsce 工具 ============
       - name: Install vsce
-        run: npm install -g vsce
+        run: npm install -g vsce  # vsce 用于打包和发布 VS Code 扩展
 
+      # ============ 第9步：打包为 VSIX 文件 ============
       - name: Package extension (VSIX)
-        run: vsce package -o extension.vsix
+        run: vsce package -o extension.vsix  # 生成可安装的扩展包
 
+      # ============ 第10步：创建 GitHub Release ============
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v${{ steps.version_bump.outputs.new_version }}
-          files: extension.vsix
-          draft: false
-          prerelease: false
+          tag_name: v${{ steps.version_bump.outputs.new_version }}  # 使用新版本号作为标签
+          files: extension.vsix  # 上传 VSIX 文件到 release
+          draft: false  # 创建正式发布（非草稿）
+          prerelease: false  # 标记为稳定版本
           body: |
             VS Code Window Tracker v${{ steps.version_bump.outputs.new_version }}
             
@@ -81,13 +104,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # ============ 第11步：发布到 VS Code 扩展市场 ============
       - name: Publish to Visual Studio Marketplace
         env:
-          VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
+          VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}  # 需要在 GitHub Secrets 中配置
         run: |
+          # 检查 token 是否存在，如果存在则发布
           if [ -n "$VSCE_TOKEN" ]; then
             vsce publish --pat "$VSCE_TOKEN"
             echo "✓ Published to Visual Studio Marketplace v${{ steps.version_bump.outputs.new_version }}"
           else
+            # 如果 token 未配置，跳过发布但不失败（允许流程继续）
             echo "⚠ VSCE_TOKEN not set; skipping marketplace publish"
           fi
