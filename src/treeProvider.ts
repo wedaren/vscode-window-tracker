@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as os from 'os';
 import { createDataManager, WindowRecord } from './dataManager';
 
 export type WindowState = 'focused' | 'visible' | 'idle';
@@ -242,9 +243,31 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<TreeNode>
 			}
 			// try to parse as uri/file
 			let created: WindowNode | null = null;
+			// If the added id looks like a dedupe key (e.g. 'path::none'), prefer the
+			// portion before the '::' as the candidate path/uri. Also expand '~'.
+			let candidate = addedId;
+			if (addedId.includes('::')) {
+				candidate = addedId.split('::')[0];
+			}
+			if (candidate.startsWith('~')) {
+				candidate = candidate.replace(/^~(?=$|\/|\\)/, os.homedir());
+			}
 			try {
-				const u = vscode.Uri.parse(addedId);
-				const p = u.fsPath || addedId;
+				// Prefer treating candidate as a file path when it looks like one.
+				let u: vscode.Uri;
+				if (candidate.startsWith('file:')) {
+					u = vscode.Uri.parse(candidate);
+				} else if (candidate.includes(path.sep) || candidate.startsWith('/') || /^[A-Za-z]:\\/.test(candidate)) {
+					u = vscode.Uri.file(candidate);
+				} else {
+					// fallback to parse; this handles remote/file: URIs if present
+					u = vscode.Uri.parse(candidate);
+					// if parse yields no fsPath but candidate looks like a path, create file uri
+					if (!u.fsPath && candidate.includes('/')) {
+						u = vscode.Uri.file(candidate);
+					}
+				}
+				const p = u.fsPath || candidate;
 				created = {
 					type: 'window',
 					stableId: addedId,
