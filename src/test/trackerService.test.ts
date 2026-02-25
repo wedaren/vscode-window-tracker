@@ -4,29 +4,14 @@ import * as fs from 'fs/promises';
 import { TrackerService } from '../trackerService';
 
 suite('TrackerService 使用场景测试', () => {
-  const origFs = {
-    mkdir: fs.mkdir,
-    writeFile: fs.writeFile,
-    rename: fs.rename,
-    unlink: fs.unlink,
-    readdir: fs.readdir,
-    readFile: fs.readFile,
-  };
   const origGetConfig = vscode.workspace.getConfiguration;
 
   setup(() => {
     // stub configuration to use defaults
-    (vscode.workspace as any).getConfiguration = (_) => ({ get: (_k: any, d: any) => d });
+    (vscode.workspace as any).getConfiguration = (_: any) => ({ get: (_k: any, d: any) => d });
   });
 
   teardown(() => {
-    // restore fs
-    (fs as any).mkdir = origFs.mkdir;
-    (fs as any).writeFile = origFs.writeFile;
-    (fs as any).rename = origFs.rename;
-    (fs as any).unlink = origFs.unlink;
-    (fs as any).readdir = origFs.readdir;
-    (fs as any).readFile = origFs.readFile;
     // restore vscode config
     (vscode.workspace as any).getConfiguration = origGetConfig;
   });
