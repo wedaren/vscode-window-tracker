@@ -3,7 +3,7 @@
   "displayName": "vscode-window-tracker",
   "publisher": "wedaren",
   "description": "Track and manage VS Code workspace windows efficiently",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "repository": {
     "type": "git",
     "url": "https://github.com/wedaren/vscode-window-tracker"
@@ -15,7 +15,9 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": ["*"],
+  "activationEvents": [
+    "*"
+  ],
   "main": "./out/extension.js",
   "contributes": {
     "viewsContainers": {
@@ -70,8 +72,7 @@
           "default": 200,
           "minimum": 10,
           "description": "When number of windows exceeds this threshold, view groups by state."
-        }
-        ,
+        },
         "vscode-window-tracker.trackerFileStaleMinutes": {
           "type": "number",
           "default": 30,
@@ -118,8 +119,7 @@
           "command": "vscode-window-tracker.refresh",
           "when": "view == vscode-window-tracker.windowsView",
           "group": "navigation"
-        }
-        ,
+        },
         {
           "command": "vscode-window-tracker.addProject",
           "when": "view == vscode-window-tracker.windowsView",
