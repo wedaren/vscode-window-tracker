@@ -31,7 +31,7 @@ export class TrackerService {
         this.staleMinutes = cfg.get<number>('trackerFileStaleMinutes', 30) ?? 30;
         this.autoCleanup = cfg.get<boolean>('trackerAutoCleanup', true) ?? true;
 
-        this.trackerFilePath = this.context.globalState.get<string>('vscode-window-tracker.trackerFile');
+        this.trackerFilePath = undefined;
 
         this.boundExitHandler = () => {
             if (this.trackerFilePath) {
@@ -102,10 +102,29 @@ export class TrackerService {
 
     async writeNow(): Promise<void> {
         await this.ensureDir();
+        // If we have a stored tracker file path, validate ownership before reusing it.
+        if (this.trackerFilePath) {
+            try {
+                const existing = await this.fsImpl.readFile(this.trackerFilePath, 'utf8');
+                try {
+                    const parsed = JSON.parse(existing);
+                    // If the file is owned by another process, don't reuse it.
+                    if (parsed && typeof parsed.pid === 'number' && parsed.pid !== process.pid) {
+                        this.trackerFilePath = undefined;
+                    }
+                } catch {
+                    // If parse fails, don't trust the file — create a new one.
+                    this.trackerFilePath = undefined;
+                }
+            } catch {
+                // Can't read the file (missing/unreadable) — create a new one.
+                this.trackerFilePath = undefined;
+            }
+        }
+
         if (!this.trackerFilePath) {
             const fname = `vscode-${process.pid}-${Date.now()}.json`;
             this.trackerFilePath = path.join(this.trackerDir, fname);
-            await this.context.globalState.update('vscode-window-tracker.trackerFile', this.trackerFilePath);
         }
 
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -139,7 +158,6 @@ export class TrackerService {
             // ignore
         }
         this.trackerFilePath = undefined;
-        await this.context.globalState.update('vscode-window-tracker.trackerFile', undefined);
     }
 
     private async startupCleanup(): Promise<void> {
