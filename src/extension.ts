@@ -47,20 +47,4 @@ export function activate(context: vscode.ExtensionContext) {
 
 }
 
-export function deactivate() {
-	// attempt best-effort cleanup using stored extContext
-	try {
-		void (async () => {
-			if (!extContext) return;
-			const pathToRemove = extContext.globalState.get<string>('vscode-window-tracker.trackerFile');
-			if (pathToRemove) {
-				try { await fs.unlink(pathToRemove); } catch { }
-				await extContext.globalState.update('vscode-window-tracker.trackerFile', undefined);
-			}
-		})();
-	} catch {
-		// ignore
-	}
-}
-
 
