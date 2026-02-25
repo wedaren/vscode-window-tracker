@@ -102,7 +102,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		} else if (element.uri) {
 			try {
 				const u = vscode.Uri.parse(element.uri);
-				title = path.basename(u.fsPath) || u.path.split('/').pop() || u.toString();
+				title = path.basename(u.fsPath) || path.posix.basename(u.path) || u.toString();
 			} catch {
 				// ignore
 			}
