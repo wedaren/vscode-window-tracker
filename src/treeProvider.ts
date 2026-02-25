@@ -3,12 +3,9 @@ import * as path from 'path';
 import * as os from 'os';
 import { createDataManager, WindowRecord } from './dataManager';
 
-export type WindowState = 'focused' | 'visible' | 'idle';
-
 export interface WindowNode extends WindowRecord {
 	type: 'window';
 	stableId: string;
-	state: WindowState;
 	origin: 'tracked' | 'added';
 	dirUri?: vscode.Uri;
 	relativeActive: string;
@@ -83,7 +80,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
  		this.nodes = this.normalizeNodes(loaded);
  		const hash = JSON.stringify(this.nodes.map((item) => ({
  			id: item.stableId,
- 			state: item.state,
+
  			relativeActive: item.relativeActive,
  			path: item.path,
  			title: item.title,
@@ -125,11 +122,12 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 			// ignore logging errors
 		}
 		// Click on the item should not trigger any default command; keep actions in context menu only.
- 		if (element.state === 'focused') {
+		const isCurrentWorkspace = this.isCurrentWorkspace(element.path, element.uri);
+ 		if (isCurrentWorkspace) {
  			item.label = { label: title, highlights: [[0, title.length]] };
  		}
  		item.accessibilityInformation = {
- 			label: `${title}, ${this.getStateLabel(element.state)}, ${element.relativeActive}`,
+ 			label: `${title}, ${element.relativeActive}`,
  			role: 'treeitem',
  		};
  		return item;
@@ -150,7 +148,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 						lastActive: Date.now(),
 						source: 'none',
 						status: 'idle',
-						state: 'idle',
+
 						origin: 'tracked',
 						dirUri: undefined,
 						relativeActive: 'now',
@@ -166,32 +164,22 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
  	private normalizeNodes(records: WindowRecord[]): WindowNode[] {
  		const now = Date.now();
- 		const idleMinutes = this.getConfig<number>('idleThresholdMinutes', 30);
- 		const idleThresholdMs = idleMinutes * 60 * 1000;
 		const enriched = records.map((record, index) => {
 			const stableId = this.dataManager.buildDedupKeys(record)[0] || `${record.path || record.title || 'window'}-${index}`;
- 			const dirUri = this.toDirUri(record.path, record.uri);
- 			const lastActive = record.lastActive ?? now;
- 			const idle = now - lastActive >= idleThresholdMs;
- 			const focused = record.status === 'focused' || record.status === 'active';
- 			const state: WindowState = focused ? 'focused' : idle ? 'idle' : 'visible';
+			const dirUri = this.toDirUri(record.path, record.uri);
+			const lastActive = record.lastActive ?? now;
 			return {
 				type: 'window' as const,
 				...record,
 				stableId,
-				state,
 				origin: 'tracked' as const,
 				dirUri,
 				relativeActive: this.toRelativeTime(lastActive),
 			};
- 		});
+		});
 
 		const sorted = enriched.sort((a, b) => {
-			// no pin ordering; keep ordering by state then lastActive
-			const stateOrder = this.stateOrder(a.state) - this.stateOrder(b.state);
-			if (stateOrder !== 0) {
-				return stateOrder;
-			}
+			// Sort by lastActive (most recent first)
 			return (b.lastActive ?? 0) - (a.lastActive ?? 0);
 		});
 
@@ -233,7 +221,6 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 					lastActive: Date.now(),
 					source: 'added',
 					status: 'idle',
-					state: 'idle',
 					origin: 'added' as const,
 					dirUri: u,
 					relativeActive: 'now',
@@ -251,7 +238,6 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 					lastActive: Date.now(),
 					source: 'added',
 					status: 'idle',
-					state: 'idle',
 					origin: 'added' as const,
 					dirUri: undefined,
 					relativeActive: 'now',
@@ -260,8 +246,16 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 			addedNodes.push(created);
 		}
 
-		// tracked nodes first, then added nodes
-		const combined: WindowNode[] = [...sorted, ...addedNodes];
+		// Combine and sort: tracked nodes first, then added nodes
+		// Within each group, sort by lastActive
+		const combined: WindowNode[] = [...sorted, ...addedNodes].sort((a, b) => {
+			// First sort by origin: tracked before added
+			if (a.origin !== b.origin) {
+				return a.origin === 'tracked' ? -1 : 1;
+			}
+			// Within same origin, sort by lastActive (most recent first)
+			return (b.lastActive ?? 0) - (a.lastActive ?? 0);
+		});
 		return combined;
 	}
 
@@ -273,7 +267,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
  	private buildTooltip(node: WindowNode): vscode.MarkdownString {
  		const md = new vscode.MarkdownString(undefined, true);
  		md.appendMarkdown(`**${node.title || 'Untitled Window'}**\n\n`);
-		md.appendMarkdown(`- status: ${node.state}\n`);
+
  		md.appendMarkdown(`- path: ${node.path || '-'}\n`);
  		md.appendMarkdown(`- pid: ${node.pid ?? '-'}\n`);
  		md.appendMarkdown(`- lastActive: ${node.lastActive ? new Date(node.lastActive).toLocaleString() : '-'}\n`);
@@ -311,37 +305,12 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 	private getNodeIcon(node: WindowNode): vscode.ThemeIcon {
 		const added = this.isAdded(node.stableId);
-		if (node.state === 'focused') {
+		const isCurrentWorkspace = this.isCurrentWorkspace(node.path, node.uri);
+		if (isCurrentWorkspace) {
 			return new vscode.ThemeIcon('repo', new vscode.ThemeColor('charts.blue'));
 		}
-		// other opened windows grey icon
-		if (node.state === 'visible') {
-			return new vscode.ThemeIcon('repo', new vscode.ThemeColor('disabledForeground'));
-		}
-		// idle or unknown
-		return added ? new vscode.ThemeIcon('database') : new vscode.ThemeIcon('circle-large-outline');
+		return added ? new vscode.ThemeIcon('database') : new vscode.ThemeIcon('repo', new vscode.ThemeColor('disabledForeground'));
 	}
-
- 	private getStateLabel(state: WindowState): string {
- 		switch (state) {
- 			case 'focused':
- 				return 'Focused';
- 			case 'visible':
- 				return 'Visible';
- 			default:
- 				return 'Idle';
- 		}
- 	}
-
- 	private stateOrder(state: WindowState): number {
- 		if (state === 'focused') {
- 			return 0;
- 		}
- 		if (state === 'visible') {
- 			return 1;
- 		}
- 		return 2;
- 	}
 
  	private toRelativeTime(timestamp: number): string {
  		const diffMs = Date.now() - timestamp;
@@ -373,4 +342,32 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
  		}
  		return vscode.Uri.file(recordPath);
  	}
+
+	private isCurrentWorkspace(recordPath?: string, recordUri?: string): boolean {
+		if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
+			return false;
+		}
+		// Try to match by path first
+		if (recordPath) {
+			for (const folder of vscode.workspace.workspaceFolders) {
+				if (folder.uri.fsPath === recordPath) {
+					return true;
+				}
+			}
+		}
+		// Try to match by URI
+		if (recordUri) {
+			try {
+				const uri = vscode.Uri.parse(recordUri);
+				for (const folder of vscode.workspace.workspaceFolders) {
+					if (folder.uri.fsPath === uri.fsPath) {
+						return true;
+					}
+				}
+			} catch {
+				// ignore parse errors
+			}
+		}
+		return false;
+	}
 }
