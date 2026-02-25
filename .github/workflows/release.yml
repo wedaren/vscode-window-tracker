@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'src/**'
+      - 'package.json'
+      - '.github/workflows/release.yml'
 
 permissions:
   contents: write
@@ -14,21 +18,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Determine release tag
+      - name: Configure git
         run: |
-          echo "GITHUB_REF=$GITHUB_REF"
-          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            REF_NAME=${GITHUB_REF#refs/tags/}
-            echo "RELEASE_TAG=${REF_NAME}" >> $GITHUB_ENV
-          else
-            VERSION=$(node -p "require('./package.json').version") || true
-            if [[ -n "$VERSION" ]]; then
-              echo "RELEASE_TAG=v$VERSION" >> $GITHUB_ENV
-            else
-              echo "RELEASE_TAG=main-${GITHUB_SHA::8}" >> $GITHUB_ENV
-            fi
-          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Set up Node
         uses: actions/setup-node@v4
@@ -38,6 +35,28 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Bump version and create tag
+        id: version_bump
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          echo "old_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          
+          npm version patch --no-git-tag-version
+          
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          git add package.json package-lock.json
+          git commit -m "chore: release v$NEW_VERSION"
+          git tag "v$NEW_VERSION"
+          
+          echo "✓ Version bumped: $CURRENT_VERSION → $NEW_VERSION"
+
+      - name: Push changes and tags
+        run: |
+          git push origin main
+          git push origin "v${{ steps.version_bump.outputs.new_version }}"
+
       - name: Compile
         run: npm run compile
 
@@ -45,20 +64,30 @@ jobs:
         run: npm install -g vsce
 
       - name: Package extension (VSIX)
-        run: |
-          vsce package -o extension.vsix
+        run: vsce package -o extension.vsix
 
-      # Create GitHub Release step removed — handled externally if needed.
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ steps.version_bump.outputs.new_version }}
+          files: extension.vsix
+          draft: false
+          prerelease: false
+          body: |
+            VS Code Window Tracker v${{ steps.version_bump.outputs.new_version }}
+            
+            **Changes:**
+            - Auto-released version bump
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Uploading VSIX to the GitHub release removed — handled externally if needed.
-
-      - name: Publish to Visual Studio Marketplace (optional)
+      - name: Publish to Visual Studio Marketplace
         env:
           VSCE_TOKEN: ${{ secrets.VSCE_TOKEN }}
         run: |
-          # publish requires a 'publisher' field in package.json and a PAT stored in VSCE_TOKEN
           if [ -n "$VSCE_TOKEN" ]; then
             vsce publish --pat "$VSCE_TOKEN"
+            echo "✓ Published to Visual Studio Marketplace v${{ steps.version_bump.outputs.new_version }}"
           else
-            echo "VSCE_TOKEN not set; skipping publish"
+            echo "⚠ VSCE_TOKEN not set; skipping marketplace publish"
           fi
