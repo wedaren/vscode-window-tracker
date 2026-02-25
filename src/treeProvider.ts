@@ -2,6 +2,9 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import { createDataManager, WindowRecord } from './dataManager';
+import { WindowNode } from './types';
+import { createAddedManager } from './addedManager';
+import { normalizeTrackedNodes } from './trackedManager';
 
 export interface WindowNode extends WindowRecord {
 	type: 'window';
@@ -16,14 +19,13 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
  	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
  	private nodes: WindowNode[] = [];
-	 private addedSet: Set<string>;
- 	 private dataManager: ReturnType<typeof createDataManager>;
+	private addedManager: ReturnType<typeof createAddedManager>;
+	 private dataManager: ReturnType<typeof createDataManager>;
  	private lastHash = '';
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.dataManager = createDataManager(this.context);
-		const added = this.dataManager.getAddedArray();
-		this.addedSet = new Set(added);
+		this.addedManager = createAddedManager(this.dataManager as any) as any;
 	}
 
 
@@ -46,7 +48,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 	// pin functionality removed
 
 	public isAdded(stableId: string): boolean {
-		return this.addedSet.has(stableId);
+		return this.addedManager.isAdded(stableId);
 	}
 
  	public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<void> {
@@ -62,34 +64,43 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 			targetUri = picked[0];
 		}
 		const stableId = node?.stableId ?? targetUri.toString();
-		this.addedSet.add(stableId);
-		await this.dataManager.persistAddedArray([...this.addedSet]);
+		await this.addedManager.add(stableId);
 		await this.refresh(true);
 	}
 
 	public async removeProjectById(stableId: string): Promise<void> {
-		if (this.addedSet.has(stableId)) {
-			this.addedSet.delete(stableId);
-			await this.dataManager.persistAddedArray([...this.addedSet]);
-			await this.refresh(true);
-		}
+		await this.addedManager.remove(stableId);
+		await this.refresh(true);
 	}
 
  	public async refresh(force = false): Promise<void> {
  		const loaded = await this.dataManager.loadAllRecords();
- 		this.nodes = this.normalizeNodes(loaded);
- 		const hash = JSON.stringify(this.nodes.map((item) => ({
- 			id: item.stableId,
-
- 			relativeActive: item.relativeActive,
- 			path: item.path,
- 			title: item.title,
- 		})));
-
- 		if (force || hash !== this.lastHash) {
- 			this.lastHash = hash;
- 			this._onDidChangeTreeData.fire(undefined);
- 		}
+		const trackedNodes = normalizeTrackedNodes(loaded, this.dataManager as any);
+		let addedNodes = this.addedManager.buildAddedNodes();
+		// Merge added state into tracked nodes when stableId collides. Only keep
+		// standalone added nodes for those not present in trackedNodes.
+		const trackedById = new Map(trackedNodes.map(n => [n.stableId, n]));
+		const standaloneAdded: typeof addedNodes = [];
+		for (const a of addedNodes) {
+			const t = trackedById.get(a.stableId);
+			if (t) {
+				// mark the tracked node as added and skip creating a separate added node
+				t.isAdded = true;
+			} else {
+				standaloneAdded.push(a);
+			}
+		}
+		addedNodes = standaloneAdded;
+		// Combine and sort: tracked before added, each by lastActive desc
+		this.nodes = [...trackedNodes, ...addedNodes].sort((a, b) => {
+			if (a.origin !== b.origin) return a.origin === 'tracked' ? -1 : 1;
+			return (b.lastActive ?? 0) - (a.lastActive ?? 0);
+		});
+		const hash = JSON.stringify(this.nodes.map((item) => ({ id: item.stableId, relativeActive: item.relativeActive, path: item.path, title: item.title })));
+		if (force || hash !== this.lastHash) {
+			this.lastHash = hash;
+			this._onDidChangeTreeData.fire(undefined);
+		}
  	}
 
  	public getTreeItem(element: WindowNode): vscode.TreeItem {
@@ -107,7 +118,8 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 			title = element.title;
 		}
  		const item = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
- 		item.id = element.stableId;
+		// Ensure the TreeItem id is globally unique by including origin prefix
+		item.id = `${element.origin}:${element.stableId}`;
  		item.iconPath = this.getNodeIcon(element);
  		item.description = this.buildDescription(element);
  		item.tooltip = this.buildTooltip(element);
@@ -162,102 +174,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 
 
- 	private normalizeNodes(records: WindowRecord[]): WindowNode[] {
- 		const now = Date.now();
-		const enriched = records.map((record, index) => {
-			const stableId = this.dataManager.buildDedupKeys(record)[0] || `${record.path || record.title || 'window'}-${index}`;
-			const dirUri = this.toDirUri(record.path, record.uri);
-			const lastActive = record.lastActive ?? now;
-			return {
-				type: 'window' as const,
-				...record,
-				stableId,
-				origin: 'tracked' as const,
-				dirUri,
-				relativeActive: this.toRelativeTime(lastActive),
-			};
-		});
 
-		const sorted = enriched.sort((a, b) => {
-			// Sort by lastActive (most recent first)
-			return (b.lastActive ?? 0) - (a.lastActive ?? 0);
-		});
-
-		// Ensure added projects (from addedSet) are present in the list.
-		const existingIds = new Set(sorted.map((n) => n.stableId));
-		const addedNodes: WindowNode[] = [];
-		for (const addedId of this.addedSet) {
-			if (existingIds.has(addedId)) {
-				continue;
-			}
-			// try to parse as uri/file
-			let created: WindowNode | null = null;
-			// If the added id looks like a dedupe key (e.g. 'path::none'), prefer the
-			// portion before the '::' as the candidate path/uri. Also expand '~'.
-			let candidate = addedId;
-			if (addedId.includes('::')) {
-				candidate = addedId.split('::')[0];
-			}
-			if (candidate.startsWith('~')) {
-				candidate = candidate.replace(/^~(?=$|\/|\\)/, os.homedir());
-			}
-			try {
-				// Check for URI scheme first; if present, parse as URI, otherwise treat as file path.
-				let u: vscode.Uri;
-				if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)) {
-					u = vscode.Uri.parse(candidate);
-				} else {
-					u = vscode.Uri.file(candidate);
-				}
-				const p = u.fsPath || candidate;
-				created = {
-					type: 'window',
-					stableId: addedId,
-					title: path.basename(p) || addedId,
-					path: p,
-					uri: u.toString(),
-					pid: undefined,
-					windowId: undefined,
-					lastActive: Date.now(),
-					source: 'added',
-					status: 'idle',
-					origin: 'added' as const,
-					dirUri: u,
-					relativeActive: 'now',
-				};
-			} catch {
-				// fallback: use id as title
-				created = {
-					type: 'window',
-					stableId: addedId,
-					title: addedId,
-					path: undefined,
-					uri: undefined,
-					pid: undefined,
-					windowId: undefined,
-					lastActive: Date.now(),
-					source: 'added',
-					status: 'idle',
-					origin: 'added' as const,
-					dirUri: undefined,
-					relativeActive: 'now',
-				};
-			}
-			addedNodes.push(created);
-		}
-
-		// Combine and sort: tracked nodes first, then added nodes
-		// Within each group, sort by lastActive
-		const combined: WindowNode[] = [...sorted, ...addedNodes].sort((a, b) => {
-			// First sort by origin: tracked before added
-			if (a.origin !== b.origin) {
-				return a.origin === 'tracked' ? -1 : 1;
-			}
-			// Within same origin, sort by lastActive (most recent first)
-			return (b.lastActive ?? 0) - (a.lastActive ?? 0);
-		});
-		return combined;
-	}
 
 	private buildDescription(node: WindowNode): string {
 		const shortPath = node.path ? path.basename(node.path) : 'no-path';
@@ -283,28 +200,25 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		//  - windowItem:added
 		//  - windowItem:tracked
 		//  - windowItem:tracked:allowAdd
-		let added = false;
-		try {
-			added = this.isAdded(node.stableId);
-		} catch {
-			// defensive: placeholder nodes may cause isAdded to throw; treat as not added
-			added = false;
-		}
-		if (added) {
-			return 'windowItem:added';
-		}
+		// Priority: origin + whether the tracked node is also in the added list.
+		// - Pure added items -> 'windowItem:added'
+		// - Tracked items that were added by the user -> 'windowItem:tracked:added'
+		// - Tracked items not added -> 'windowItem:tracked:allowAdd'
 		if (node.origin === 'added') {
 			return 'windowItem:added';
 		}
-		// tracked nodes: expose whether adding is allowed
-		if (!added) {
+		if (node.origin === 'tracked') {
+			if (node.isAdded) return 'windowItem:tracked:added';
 			return 'windowItem:tracked:allowAdd';
 		}
+		// fallback
 		return 'windowItem:tracked';
 	}
 
 	private getNodeIcon(node: WindowNode): vscode.ThemeIcon {
-		const added = this.isAdded(node.stableId);
+		// Prefer the merged `isAdded` flag on the node when available to avoid
+		// extra lookups; fall back to the addedManager if it's absent.
+		const added = (typeof node.isAdded === 'boolean') ? node.isAdded : this.isAdded(node.stableId);
 		const isCurrentWorkspace = this.isCurrentWorkspace(node.path, node.uri);
 		if (isCurrentWorkspace) {
 			return new vscode.ThemeIcon('repo', new vscode.ThemeColor('charts.blue'));
