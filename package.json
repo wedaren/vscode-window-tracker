@@ -67,12 +67,6 @@
           "minimum": 1,
           "description": "Heartbeat interval in seconds for refreshing the view."
         },
-        "vscode-window-tracker.groupThreshold": {
-          "type": "number",
-          "default": 200,
-          "minimum": 10,
-          "description": "When number of windows exceeds this threshold, view groups by state."
-        },
         "vscode-window-tracker.trackerFileStaleMinutes": {
           "type": "number",
           "default": 30,

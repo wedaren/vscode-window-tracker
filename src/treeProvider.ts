@@ -5,12 +5,6 @@ import { createDataManager, WindowRecord } from './dataManager';
 
 export type WindowState = 'focused' | 'visible' | 'idle';
 
-export interface WindowGroupItem {
-	type: 'group';
- 	group: WindowState;
- 	count: number;
-}
-
 export interface WindowNode extends WindowRecord {
 	type: 'window';
 	stableId: string;
@@ -20,10 +14,8 @@ export interface WindowNode extends WindowRecord {
 	relativeActive: string;
 }
 
-export type TreeNode = WindowNode | WindowGroupItem;
-
-export class WindowTreeDataProvider implements vscode.TreeDataProvider<TreeNode> {
- 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<TreeNode | undefined>();
+export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNode> {
+ 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<WindowNode | undefined>();
  	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
  	private nodes: WindowNode[] = [];
@@ -103,36 +95,19 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<TreeNode>
  		}
  	}
 
- 	public getTreeItem(element: TreeNode): vscode.TreeItem {
- 		if (element.type === 'group') {
- 			const groupLabel = `${this.getStateLabel(element.group)} (${element.count})`;
- 			const groupItem = new vscode.TreeItem(groupLabel, vscode.TreeItemCollapsibleState.Expanded);
- 			groupItem.contextValue = `windowGroup.${element.group}`;
- 			groupItem.iconPath = this.getGroupIcon(element.group);
- 			groupItem.accessibilityInformation = {
- 				label: groupLabel,
- 				role: 'group',
- 			};
- 			return groupItem;
- 		}
-
+ 	public getTreeItem(element: WindowNode): vscode.TreeItem {
 		let title = 'Untitled Window';
-		if (element.type === 'window') {
-			if (element.path) {
-				title = path.basename(element.path);
-			} else if (element.uri) {
-				try {
-					const u = vscode.Uri.parse(element.uri);
-					title = path.basename(u.fsPath) || u.path.split('/').pop() || u.toString();
-				} catch {
-					// ignore
-				}
-			} else if (element.title) {
-				title = element.title;
+		if (element.path) {
+			title = path.basename(element.path);
+		} else if (element.uri) {
+			try {
+				const u = vscode.Uri.parse(element.uri);
+				title = path.basename(u.fsPath) || path.posix.basename(u.path) || u.toString();
+			} catch {
+				// ignore
 			}
-		} else {
-			const g = (element as WindowGroupItem).group;
-			title = g ? this.getStateLabel(g) : title;
+		} else if (element.title) {
+			title = element.title;
 		}
  		const item = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
  		item.id = element.stableId;
@@ -160,22 +135,8 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<TreeNode>
  		return item;
  	}
 
- 	public async getChildren(element?: TreeNode): Promise<TreeNode[]> {
- 		const groupThreshold = this.getConfig<number>('groupThreshold', 200);
- 		if (this.nodes.length > groupThreshold) {
- 			if (!element) {
- 				const groups: WindowState[] = ['focused', 'visible', 'idle'];
- 				return groups.map((group) => ({
- 					type: 'group',
- 					group,
- 					count: this.nodes.filter((node) => node.state === group).length,
- 				}));
- 			}
- 			if (element.type === 'group') {
- 				return this.nodes.filter((node) => node.state === element.group);
- 			}
- 		}
- 		if (!element || element.type === 'group') {
+ 	public async getChildren(element?: WindowNode): Promise<WindowNode[]> {
+ 		if (!element) {
  			if (this.nodes.length === 0) {
 				return [
 					{
@@ -360,16 +321,6 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<TreeNode>
 		// idle or unknown
 		return added ? new vscode.ThemeIcon('database') : new vscode.ThemeIcon('circle-large-outline');
 	}
-
- 	private getGroupIcon(state: WindowState): vscode.ThemeIcon {
- 		if (state === 'focused') {
- 			return new vscode.ThemeIcon('eye', new vscode.ThemeColor('charts.blue'));
- 		}
- 		if (state === 'visible') {
- 			return new vscode.ThemeIcon('eye');
- 		}
- 		return new vscode.ThemeIcon('circle-large-outline');
- 	}
 
  	private getStateLabel(state: WindowState): string {
  		switch (state) {
