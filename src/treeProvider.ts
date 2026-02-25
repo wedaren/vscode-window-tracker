@@ -253,19 +253,12 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<TreeNode>
 				candidate = candidate.replace(/^~(?=$|\/|\\)/, os.homedir());
 			}
 			try {
-				// Prefer treating candidate as a file path when it looks like one.
+				// Check for URI scheme first; if present, parse as URI, otherwise treat as file path.
 				let u: vscode.Uri;
-				if (candidate.startsWith('file:')) {
+				if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)) {
 					u = vscode.Uri.parse(candidate);
-				} else if (candidate.includes(path.sep) || candidate.startsWith('/') || /^[A-Za-z]:\\/.test(candidate)) {
-					u = vscode.Uri.file(candidate);
 				} else {
-					// fallback to parse; this handles remote/file: URIs if present
-					u = vscode.Uri.parse(candidate);
-					// if parse yields no fsPath but candidate looks like a path, create file uri
-					if (!u.fsPath && candidate.includes('/')) {
-						u = vscode.Uri.file(candidate);
-					}
+					u = vscode.Uri.file(candidate);
 				}
 				const p = u.fsPath || candidate;
 				created = {
