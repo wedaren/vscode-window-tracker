@@ -71,8 +71,8 @@ jobs:
       # ============ 第6步：推送提交和标签 ============
       - name: Push changes and tags
         run: |
-          # 推送版本提交到 main 分支（使用 HEAD:main 避免标签冲突）
-          git push origin HEAD:main
+          # 推送版本提交到 main 分支（使用完整引用路径避免标签名冲突）
+          git push origin refs/heads/main:refs/heads/main
           # 推送所有版本标签
           git push origin "v${{ steps.version_bump.outputs.new_version }}"
 
