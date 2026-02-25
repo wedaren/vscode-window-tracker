@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
+import * as os from 'os';
 import { createDataManager, WindowRecord } from './dataManager';
 
 export type WindowState = 'focused' | 'visible' | 'idle';
@@ -242,9 +243,24 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<TreeNode>
 			}
 			// try to parse as uri/file
 			let created: WindowNode | null = null;
+			// If the added id looks like a dedupe key (e.g. 'path::none'), prefer the
+			// portion before the '::' as the candidate path/uri. Also expand '~'.
+			let candidate = addedId;
+			if (addedId.includes('::')) {
+				candidate = addedId.split('::')[0];
+			}
+			if (candidate.startsWith('~')) {
+				candidate = candidate.replace(/^~(?=$|\/|\\)/, os.homedir());
+			}
 			try {
-				const u = vscode.Uri.parse(addedId);
-				const p = u.fsPath || addedId;
+				// Check for URI scheme first; if present, parse as URI, otherwise treat as file path.
+				let u: vscode.Uri;
+				if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)) {
+					u = vscode.Uri.parse(candidate);
+				} else {
+					u = vscode.Uri.file(candidate);
+				}
+				const p = u.fsPath || candidate;
 				created = {
 					type: 'window',
 					stableId: addedId,
