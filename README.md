@@ -28,8 +28,6 @@
 	- 扩展在激活时会写入当前会话的 tracker 文件（原子写入），并以配置 `vscode-window-tracker.heartbeatIntervalSeconds`（默认 5s）进行心跳刷新。
 	- 激活时可清理过期的 tracker 文件（`vscode-window-tracker.trackerAutoCleanup` 与 `trackerFileStaleMinutes` 配置）。
 
-- 性能：实现了 `groupThreshold`（配置键 `vscode-window-tracker.groupThreshold`，默认 200），当窗口数量较大时在顶层展示状态分组以减少渲染压力。
-
 ## 运行与调试
 
 1. 安装依赖
