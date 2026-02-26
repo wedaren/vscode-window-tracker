@@ -27,8 +27,26 @@ export class DataManager {
     }
     // Paths for backward-compatible storage and new 'saved' file
     this.addedFile = path.join(this.context.globalStoragePath || os.homedir(), 'added.json');
-    this.savedFile = path.join(this.context.globalStoragePath || os.homedir(), 'saved.json');
     this.trackedFile = path.join(this.context.globalStoragePath || os.homedir(), 'tracked.json');
+
+    // Prefer storing the editable `saved.json` inside the user-visible
+    // tracker directory so users can batch-edit it. Use configured
+    // `vscode-window-tracker.trackerDir` (default ~/.vscode-window-tracker).
+    try {
+      const rawTracker = this.getConfig<string>('trackerDir', '~/.vscode-window-tracker');
+      const trackerDir = rawTracker.replace(/^~(?=$|\/|\\)/, os.homedir());
+      void (async () => {
+        try {
+          await fs.mkdir(trackerDir, { recursive: true });
+        } catch {
+          // ignore
+        }
+      })();
+      this.savedFile = path.join(trackerDir, 'saved.json');
+    } catch {
+      // fallback to extension storage
+      this.savedFile = path.join(this.context.globalStoragePath || os.homedir(), 'saved.json');
+    }
 
     // Try to load the new 'saved' key first; fall back to legacy 'added' key/file and migrate.
     const storedSaved = this.context.globalState.get<string[]>('vscode-window-tracker.saved', []);
