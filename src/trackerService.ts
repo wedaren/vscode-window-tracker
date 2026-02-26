@@ -129,14 +129,42 @@ export class TrackerService {
 
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         const folderPath = workspaceFolder?.uri.fsPath;
+        const status = vscode.window.state.focused ? 'focused' : 'visible';
+
+        // Determine lastActive such that it represents the last time the
+        // window was focused. Do not update lastActive on periodic heartbeats
+        // when the window is not focused — preserve the existing value if any.
+        let lastActiveValue = Date.now();
+        if (status !== 'focused') {
+            // Try to read existing tracker file to reuse prior lastActive
+            try {
+                const existingPath = this.trackerFilePath ?? (await this.context.globalState.get('vscode-window-tracker.trackerFile')) as string | undefined;
+                if (existingPath) {
+                    const existing = await this.fsImpl.readFile(existingPath, 'utf8').catch(() => undefined);
+                    if (existing) {
+                        try {
+                            const parsed = JSON.parse(existing);
+                            if (parsed && typeof parsed.lastActive === 'number') {
+                                lastActiveValue = parsed.lastActive;
+                            }
+                        } catch {
+                            // ignore parse errors and keep now as fallback
+                        }
+                    }
+                }
+            } catch {
+                // ignore read errors
+            }
+        }
+
         const rec = {
             title: vscode.window.activeTextEditor?.document.fileName ? path.basename(vscode.window.activeTextEditor.document.fileName) : 'Current Workspace',
             path: folderPath,
             uri: workspaceFolder?.uri.toString(),
             pid: process.pid,
-            lastActive: Date.now(),
+            lastActive: lastActiveValue,
             source: 'vscode-extension',
-            status: vscode.window.state.focused ? 'focused' : 'visible',
+            status,
         };
 
         try {
