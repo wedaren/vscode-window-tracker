@@ -28,7 +28,7 @@ export function normalizeTrackedNodes(records: WindowRecord[], dataManager: Data
             stableId,
             origin: 'tracked',
             dirUri,
-            relativeActive: toRelativeTime(lastActive),
+            relativeActive: toRelativeTime(lastActive, now),
         } as WindowNode;
     });
 
@@ -36,8 +36,8 @@ export function normalizeTrackedNodes(records: WindowRecord[], dataManager: Data
     return sorted;
 }
 
-function toRelativeTime(timestamp: number): string {
-    const diffMs = Date.now() - timestamp;
+function toRelativeTime(timestamp: number, now: number): string {
+    const diffMs = now - timestamp;
     if (diffMs < 60_000) return 'now';
     const mins = Math.floor(diffMs / 60_000);
     if (mins < 60) return `${mins}m`;
