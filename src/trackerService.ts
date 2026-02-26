@@ -158,6 +158,19 @@ export class TrackerService {
     }
 
     async removeNow(): Promise<void> {
+        if (!this.trackerFilePath) {
+            // Try to recover the stored tracker path from globalState (useful
+            // in tests or across runs where the service wasn't the one that
+            // created the file in this process).
+            try {
+                const stored = await this.context.globalState.get('vscode-window-tracker.trackerFile');
+                if (typeof stored === 'string') {
+                    this.trackerFilePath = stored;
+                }
+            } catch {
+                // ignore
+            }
+        }
         if (!this.trackerFilePath) return;
         try {
             await this.fsImpl.unlink(this.trackerFilePath);
