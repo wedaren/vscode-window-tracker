@@ -2,8 +2,9 @@ import * as path from 'path';
 import * as os from 'os';
 import * as vscode from 'vscode';
 import { WindowNode } from './types';
+import { DataManager } from './dataManager';
 
-export function createAddedManager(dataManager: any) {
+export function createAddedManager(dataManager: DataManager) {
     const addedSet = new Set<string>(dataManager.getAddedArray());
 
     function normalizeCandidate(addedId: string): WindowNode {
@@ -74,11 +75,7 @@ export function createAddedManager(dataManager: any) {
             return [...addedSet];
         },
         buildAddedNodes(): WindowNode[] {
-            const nodes: WindowNode[] = [];
-            for (const addedId of addedSet) {
-                nodes.push(normalizeCandidate(addedId));
-            }
-            return nodes;
+            return [...addedSet].map(normalizeCandidate);  
         },
     };
 }

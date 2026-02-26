@@ -1,9 +1,9 @@
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { WindowRecord } from './dataManager';
+import { DataManager, WindowRecord } from './dataManager';
 import { WindowNode } from './types';
 
-export function normalizeTrackedNodes(records: WindowRecord[], dataManager: any, addedSet?: Set<string>): WindowNode[] {
+export function normalizeTrackedNodes(records: WindowRecord[], dataManager: DataManager): WindowNode[] {
     const now = Date.now();
     const enriched: WindowNode[] = records.map((record, index) => {
         const stableId = (dataManager.buildDedupKeys(record) || [])[0] || `${record.path || record.title || 'window'}-${index}`;
@@ -29,7 +29,6 @@ export function normalizeTrackedNodes(records: WindowRecord[], dataManager: any,
             origin: 'tracked',
             dirUri,
             relativeActive: toRelativeTime(lastActive),
-            isAdded: !!(addedSet && addedSet.has(stableId)),
         } as WindowNode;
     });
 
