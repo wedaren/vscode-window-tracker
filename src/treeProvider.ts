@@ -216,6 +216,11 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		if (isCurrentWorkspace) {
 			return new vscode.ThemeIcon('repo', new vscode.ThemeColor('charts.blue'));
 		}
+
+		if (node.origin === 'tracked') {
+			return new vscode.ThemeIcon('repo');
+		}
+		
 		return added ? new vscode.ThemeIcon('database') : new vscode.ThemeIcon('repo', new vscode.ThemeColor('disabledForeground'));
 	}
 

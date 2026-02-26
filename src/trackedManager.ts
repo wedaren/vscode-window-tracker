@@ -1,4 +1,3 @@
-import * as path from 'path';
 import * as vscode from 'vscode';
 import { DataManager, WindowRecord } from './dataManager';
 import { WindowNode } from './types';
