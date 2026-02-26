@@ -71,10 +71,10 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
  	public async refresh(force = false): Promise<void> {
  		const loaded = await this.dataManager.loadAllRecords();
 		const trackedNodes = this.trackedService.normalizeTrackedNodes(loaded);
-		let addedNodes = this.savedService.buildSavedNodes();
+		const trackedById = new Map(trackedNodes.map(n => [n.stableId, n]));
+		let addedNodes = this.savedService.buildSavedNodes(trackedById);
 		// Merge added state into tracked nodes when stableId collides. Only keep
 		// standalone added nodes for those not present in trackedNodes.
-		const trackedById = new Map(trackedNodes.map(n => [n.stableId, n]));
 		const standaloneAdded: typeof addedNodes = [];
 		for (const a of addedNodes) {
 			const t = trackedById.get(a.stableId);

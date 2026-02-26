@@ -33,11 +33,11 @@ export class SavedService {
         return [...this.savedSet];
     }
 
-    buildSavedNodes(): WindowNode[] {
-        return [...this.savedSet].map((savedId) => this.normalizeCandidate(savedId));
+    buildSavedNodes(trackedById?: Map<string, import('./types').WindowNode>): WindowNode[] {
+        return [...this.savedSet].map((savedId) => this.normalizeCandidate(savedId, trackedById?.get(savedId)?.lastActive));
     }
 
-    private normalizeCandidate(savedId: string): WindowNode {
+    private normalizeCandidate(savedId: string, lastActiveOverride?: number): WindowNode {
         let candidate = savedId;
         if (savedId.includes('::')) {
             candidate = savedId.split('::')[0];
@@ -61,7 +61,7 @@ export class SavedService {
                 uri: u.toString(),
                 pid: undefined,
                 windowId: undefined,
-                lastActive: Date.now(),
+                lastActive: typeof lastActiveOverride === 'number' ? lastActiveOverride : Date.now(),
                 source: 'saved',
                 status: 'idle',
                 origin: 'saved',
@@ -77,7 +77,7 @@ export class SavedService {
                 uri: undefined,
                 pid: undefined,
                 windowId: undefined,
-                lastActive: Date.now(),
+                lastActive: typeof lastActiveOverride === 'number' ? lastActiveOverride : Date.now(),
                 source: 'saved',
                 status: 'idle',
                 origin: 'saved',
