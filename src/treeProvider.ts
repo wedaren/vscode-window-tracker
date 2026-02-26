@@ -1,7 +1,6 @@
 import * as vscode from 'vscode';
 import * as path from 'path';
-import * as os from 'os';
-import { createDataManager, WindowRecord } from './dataManager';
+import { createDataManager } from './dataManager';
 import { WindowNode } from './types';
 import { createAddedManager } from './addedManager';
 import { normalizeTrackedNodes } from './trackedManager';
