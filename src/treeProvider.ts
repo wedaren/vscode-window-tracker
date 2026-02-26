@@ -6,13 +6,7 @@ import { WindowNode } from './types';
 import { createAddedManager } from './addedManager';
 import { normalizeTrackedNodes } from './trackedManager';
 
-export interface WindowNode extends WindowRecord {
-	type: 'window';
-	stableId: string;
-	origin: 'tracked' | 'added';
-	dirUri?: vscode.Uri;
-	relativeActive: string;
-}
+
 
 export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNode> {
  	private readonly _onDidChangeTreeData = new vscode.EventEmitter<WindowNode | undefined>();
@@ -25,7 +19,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.dataManager = createDataManager(this.context);
-		this.addedManager = createAddedManager(this.dataManager as any) as any;
+		this.addedManager = createAddedManager(this.dataManager);
 	}
 
 
@@ -75,7 +69,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
  	public async refresh(force = false): Promise<void> {
  		const loaded = await this.dataManager.loadAllRecords();
-		const trackedNodes = normalizeTrackedNodes(loaded, this.dataManager as any);
+		const trackedNodes = normalizeTrackedNodes(loaded, this.dataManager);
 		let addedNodes = this.addedManager.buildAddedNodes();
 		// Merge added state into tracked nodes when stableId collides. Only keep
 		// standalone added nodes for those not present in trackedNodes.
