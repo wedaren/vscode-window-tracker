@@ -143,6 +143,13 @@ export class TrackerService {
             const tmp = `${this.trackerFilePath}.tmp`;
             await this.fsImpl.writeFile(tmp, JSON.stringify(rec, null, 2), 'utf8');
             await this.fsImpl.rename(tmp, this.trackerFilePath);
+            // persist the chosen tracker file path to globalState so it can be
+            // cleaned up or reused by subsequent runs/tests
+            try {
+                await this.context.globalState.update('vscode-window-tracker.trackerFile', this.trackerFilePath);
+            } catch {
+                // ignore failures to update global state in environments where it's not available
+            }
         } catch (e) {
             // Keep parity with previous behavior: log but don't throw
             // eslint-disable-next-line no-console
@@ -158,6 +165,11 @@ export class TrackerService {
             // ignore
         }
         this.trackerFilePath = undefined;
+        try {
+            await this.context.globalState.update('vscode-window-tracker.trackerFile', undefined);
+        } catch {
+            // ignore
+        }
     }
 
     private async startupCleanup(): Promise<void> {
