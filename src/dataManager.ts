@@ -59,6 +59,15 @@ export class DataManager {
     void this.writeJson(this.addedFile, this.addedArray);
   }
 
+  // Compatibility wrappers for renamed concept 'saved'
+  public getSavedArray(): string[] {
+    return this.getAddedArray();
+  }
+
+  public async persistSavedArray(arr: string[]): Promise<void> {
+    return this.persistAddedArray(arr);
+  }
+
   private async writeJson(filePath: string, data: unknown): Promise<void> {
     try {
       const tmp = `${filePath}.tmp`;

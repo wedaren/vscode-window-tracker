@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import { createDataManager } from './dataManager';
 import { WindowNode } from './types';
-import { createAddedManager } from './addedManager';
-import { normalizeTrackedNodes } from './trackedManager';
+import SavedService from './savedService';
+import TrackedService from './trackedService';
 
 
 
@@ -11,14 +11,16 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
  	private readonly _onDidChangeTreeData = new vscode.EventEmitter<WindowNode | undefined>();
  	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
- 	private nodes: WindowNode[] = [];
-	private addedManager: ReturnType<typeof createAddedManager>;
+	private nodes: WindowNode[] = [];
+	private savedService: SavedService;
+	private trackedService: TrackedService;
 	 private dataManager: ReturnType<typeof createDataManager>;
  	private lastHash = '';
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.dataManager = createDataManager(this.context);
-		this.addedManager = createAddedManager(this.dataManager);
+		this.savedService = new SavedService(this.dataManager);
+		this.trackedService = new TrackedService(this.dataManager);
 	}
 
 
@@ -40,8 +42,8 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 	// pin functionality removed
 
-	public isAdded(stableId: string): boolean {
-		return this.addedManager.isAdded(stableId);
+	public isSaved(stableId: string): boolean {
+		return this.savedService.isSaved(stableId);
 	}
 
  	public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<void> {
@@ -57,19 +59,19 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 			targetUri = picked[0];
 		}
 		const stableId = node?.stableId ?? targetUri.toString();
-		await this.addedManager.add(stableId);
+		await this.savedService.save(stableId);
 		await this.refresh(true);
 	}
 
 	public async removeProjectById(stableId: string): Promise<void> {
-		await this.addedManager.remove(stableId);
+		await this.savedService.remove(stableId);
 		await this.refresh(true);
 	}
 
  	public async refresh(force = false): Promise<void> {
  		const loaded = await this.dataManager.loadAllRecords();
-		const trackedNodes = normalizeTrackedNodes(loaded, this.dataManager);
-		let addedNodes = this.addedManager.buildAddedNodes();
+		const trackedNodes = this.trackedService.normalizeTrackedNodes(loaded);
+		let addedNodes = this.savedService.buildSavedNodes();
 		// Merge added state into tracked nodes when stableId collides. Only keep
 		// standalone added nodes for those not present in trackedNodes.
 		const trackedById = new Map(trackedNodes.map(n => [n.stableId, n]));
@@ -77,8 +79,8 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		for (const a of addedNodes) {
 			const t = trackedById.get(a.stableId);
 			if (t) {
-				// mark the tracked node as added and skip creating a separate added node
-				t.isAdded = true;
+				// mark the tracked node as saved and skip creating a separate saved node
+				t.isSaved = true;
 			} else {
 				standaloneAdded.push(a);
 			}
@@ -118,9 +120,9 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
  		item.tooltip = this.buildTooltip(element);
  		item.contextValue = this.buildContextValue(element);
 		// Diagnostic logging to help verify inline menu/context tokens at runtime.
-		// Only log for added items to reduce noise.
+		// Only log for saved items to reduce noise.
 		try {
-			if (element.origin === 'added') {
+			if (element.origin === 'saved') {
 				console.debug(`[vscode-window-tracker] contextValue for ${item.id}: ${item.contextValue}`);
 			}
 		} catch {
@@ -190,18 +192,18 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 	private buildContextValue(node: WindowNode): string {
 		// Use structured composite tokens (colon-separated) for clarity and
 		// reliable when-clause matching. Examples:
-		//  - windowItem:added
+		//  - windowItem:saved
 		//  - windowItem:tracked
 		//  - windowItem:tracked:allowAdd
 		// Priority: origin + whether the tracked node is also in the added list.
-		// - Pure added items -> 'windowItem:added'
-		// - Tracked items that were added by the user -> 'windowItem:tracked:added'
+		// - Pure saved items -> 'windowItem:saved'
+		// - Tracked items that were saved by the user -> 'windowItem:tracked:saved'
 		// - Tracked items not added -> 'windowItem:tracked:allowAdd'
-		if (node.origin === 'added') {
-			return 'windowItem:added';
+		if (node.origin === 'saved') {
+			return 'windowItem:saved';
 		}
 		if (node.origin === 'tracked') {
-			if (node.isAdded) return 'windowItem:tracked:added';
+			if (node.isSaved) return 'windowItem:tracked:saved';
 			return 'windowItem:tracked:allowAdd';
 		}
 		// fallback
@@ -209,9 +211,9 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 	}
 
 	private getNodeIcon(node: WindowNode): vscode.ThemeIcon {
-		// Prefer the merged `isAdded` flag on the node when available to avoid
-		// extra lookups; fall back to the addedManager if it's absent.
-		const added = (typeof node.isAdded === 'boolean') ? node.isAdded : this.isAdded(node.stableId);
+		// Prefer the merged `isSaved` flag on the node when available to avoid
+		// extra lookups; fall back to the savedService if it's absent.
+		const added = (typeof node.isSaved === 'boolean') ? node.isSaved : this.isSaved(node.stableId);
 		const isCurrentWorkspace = this.isCurrentWorkspace(node.path, node.uri);
 		if (isCurrentWorkspace) {
 			return new vscode.ThemeIcon('repo', new vscode.ThemeColor('charts.blue'));
