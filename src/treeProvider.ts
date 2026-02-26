@@ -172,8 +172,9 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 
 	private buildDescription(node: WindowNode): string {
-		const shortPath = node.path ? path.basename(node.path) : 'no-path';
-		return `${shortPath} · ${node.relativeActive}`;
+		// Show only the relative time since the node was last active (i.e. how
+		// long it hasn't been focused). Short path is intentionally omitted.
+		return `${node.relativeActive}`;
 	}
 
  	private buildTooltip(node: WindowNode): vscode.MarkdownString {
