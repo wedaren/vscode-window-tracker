@@ -1,6 +1,5 @@
 import * as assert from 'assert';
 import * as vscode from 'vscode';
-import * as fs from 'fs/promises';
 import { TrackerService } from '../trackerService';
 
 suite('TrackerService 使用场景测试', () => {

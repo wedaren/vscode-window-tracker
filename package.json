@@ -133,7 +133,7 @@
         },
         {
           "command": "vscode-window-tracker.removeProject",
-          "when": "viewItem == 'windowItem:added' && view == vscode-window-tracker.windowsView",
+          "when": "viewItem == 'windowItem:saved' && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
         }
       ]

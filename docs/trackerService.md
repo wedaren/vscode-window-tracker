@@ -1,3 +1,4 @@
+````markdown
 # TrackerService 文档
 
 ## 概述
@@ -8,7 +9,7 @@
 
 ## 公共 API
 
-- `new TrackerService(context: vscode.ExtensionContext)`：构造函数，读取配置并从 `globalState` 恢复先前记录的 tracker 文件路径。
+- `new TrackerService(context: vscode.ExtensionContext)`：构造函数，读取配置并（如果存在）尝试从 `globalState` 恢复先前记录的 tracker 文件路径。
 - `start(): void`：启动服务（执行一次启动清理、立即写入、注册心跳定时器和 VS Code 事件监听、注册进程信号处理）。
 - `stop(): void`：停止服务（停止定时器、移除事件监听、取消信号处理、并尝试删除当前 tracker 文件）。
 
@@ -26,6 +27,11 @@
 - 写入采用“原子写入”策略：先写入临时文件 `<file>.tmp`，然后 `rename` 覆盖目标文件；这样读者不会看到部分写入的数据。
 - 启动清理会遍历 `trackerDir` 下的 `.json` 文件，解析 `lastActive` 字段并删除超过阈值的文件，解析错误或不可读文件会被忽略以保证鲁棒性。
 - 在 `start()` 中注册的进程事件：`exit`、`SIGINT`、`SIGTERM`、`uncaughtException`，以便在进程退出或异常时移除 tracker 文件（防止遗留）。
+
+持久化与清理行为（实现细节补充）：
+
+- 写入成功后，服务会把所使用的 tracker 文件路径写入 `context.globalState`（键名：`vscode-window-tracker.trackerFile`），以便后续运行或测试期间能恢复并正确清理该文件。
+- 当调用 `removeNow()`（或 `stop()` 间接触发）删除当前会话文件时，如果内存中没有记录 `trackerFilePath`，服务会尝试从 `context.globalState` 中读取该路径并删除对应文件，随后把该 globalState 条目清空。这使得跨会话或测试中由不同进程/实例生成的文件也能被正确清理。
 
 ## 在 `extension.ts` 中的使用示例
 
@@ -56,3 +62,5 @@ export function activate(context: vscode.ExtensionContext) {
 ## 维护者提示
 
 - `trackerService` 的行为与用户配置紧密相关，请在修改默认配置键时在 `package.json` 中同步更新 `contributes.configuration`。
+
+````

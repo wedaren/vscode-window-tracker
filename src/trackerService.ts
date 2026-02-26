@@ -129,20 +129,55 @@ export class TrackerService {
 
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
         const folderPath = workspaceFolder?.uri.fsPath;
+        const status = vscode.window.state.focused ? 'focused' : 'visible';
+
+        // Determine lastActive such that it represents the last time the
+        // window was focused. Do not update lastActive on periodic heartbeats
+        // when the window is not focused — preserve the existing value if any.
+        let lastActiveValue = Date.now();
+        if (status !== 'focused') {
+            // Try to read existing tracker file to reuse prior lastActive
+            try {
+                const existingPath = this.trackerFilePath ?? (await this.context.globalState.get('vscode-window-tracker.trackerFile')) as string | undefined;
+                if (existingPath) {
+                    const existing = await this.fsImpl.readFile(existingPath, 'utf8').catch(() => undefined);
+                    if (existing) {
+                        try {
+                            const parsed = JSON.parse(existing);
+                            if (parsed && typeof parsed.lastActive === 'number') {
+                                lastActiveValue = parsed.lastActive;
+                            }
+                        } catch {
+                            // ignore parse errors and keep now as fallback
+                        }
+                    }
+                }
+            } catch {
+                // ignore read errors
+            }
+        }
+
         const rec = {
             title: vscode.window.activeTextEditor?.document.fileName ? path.basename(vscode.window.activeTextEditor.document.fileName) : 'Current Workspace',
             path: folderPath,
             uri: workspaceFolder?.uri.toString(),
             pid: process.pid,
-            lastActive: Date.now(),
+            lastActive: lastActiveValue,
             source: 'vscode-extension',
-            status: vscode.window.state.focused ? 'focused' : 'visible',
+            status,
         };
 
         try {
             const tmp = `${this.trackerFilePath}.tmp`;
             await this.fsImpl.writeFile(tmp, JSON.stringify(rec, null, 2), 'utf8');
             await this.fsImpl.rename(tmp, this.trackerFilePath);
+            // persist the chosen tracker file path to globalState so it can be
+            // cleaned up or reused by subsequent runs/tests
+            try {
+                await this.context.globalState.update('vscode-window-tracker.trackerFile', this.trackerFilePath);
+            } catch {
+                // ignore failures to update global state in environments where it's not available
+            }
         } catch (e) {
             // Keep parity with previous behavior: log but don't throw
             // eslint-disable-next-line no-console
@@ -151,6 +186,19 @@ export class TrackerService {
     }
 
     async removeNow(): Promise<void> {
+        if (!this.trackerFilePath) {
+            // Try to recover the stored tracker path from globalState (useful
+            // in tests or across runs where the service wasn't the one that
+            // created the file in this process).
+            try {
+                const stored = await this.context.globalState.get('vscode-window-tracker.trackerFile');
+                if (typeof stored === 'string') {
+                    this.trackerFilePath = stored;
+                }
+            } catch {
+                // ignore
+            }
+        }
         if (!this.trackerFilePath) return;
         try {
             await this.fsImpl.unlink(this.trackerFilePath);
@@ -158,6 +206,11 @@ export class TrackerService {
             // ignore
         }
         this.trackerFilePath = undefined;
+        try {
+            await this.context.globalState.update('vscode-window-tracker.trackerFile', undefined);
+        } catch {
+            // ignore
+        }
     }
 
     private async startupCleanup(): Promise<void> {

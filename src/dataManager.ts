@@ -16,27 +16,76 @@ export type WindowRecord = {
 
 export class DataManager {
   private addedFile = '';
+  private savedFile = '';
   private trackedFile = '';
-  private addedArray: string[] = [];
+  private savedArray: string[] = [];
   constructor(private readonly context: vscode.ExtensionContext) {
     try {
       void fs.mkdir(this.context.globalStoragePath, { recursive: true });
     } catch {
       // ignore
     }
+    // Paths for backward-compatible storage and new 'saved' file
     this.addedFile = path.join(this.context.globalStoragePath || os.homedir(), 'added.json');
     this.trackedFile = path.join(this.context.globalStoragePath || os.homedir(), 'tracked.json');
-    const stored = this.context.globalState.get<string[]>('vscode-window-tracker.added', []);
-    if (stored && stored.length) {
-      this.addedArray = stored;
+
+    // Prefer storing the editable `saved.json` inside the user-visible
+    // tracker directory so users can batch-edit it. Use configured
+    // `vscode-window-tracker.trackerDir` (default ~/.vscode-window-tracker).
+    try {
+      const rawTracker = this.getConfig<string>('trackerDir', '~/.vscode-window-tracker');
+      const trackerDir = rawTracker.replace(/^~(?=$|\/|\\)/, os.homedir());
+      void (async () => {
+        try {
+          await fs.mkdir(trackerDir, { recursive: true });
+        } catch {
+          // ignore
+        }
+      })();
+      this.savedFile = path.join(trackerDir, 'saved.json');
+    } catch {
+      // fallback to extension storage
+      this.savedFile = path.join(this.context.globalStoragePath || os.homedir(), 'saved.json');
+    }
+
+    // Try to load the new 'saved' key first; fall back to legacy 'added' key/file and migrate.
+    const storedSaved = this.context.globalState.get<string[]>('vscode-window-tracker.saved', []);
+    if (storedSaved && storedSaved.length) {
+      this.savedArray = storedSaved;
     } else {
       void (async () => {
+        // 1) try saved.json file
+        try {
+          const content = await fs.readFile(this.savedFile, 'utf8');
+          const parsed = JSON.parse(content);
+          if (Array.isArray(parsed)) {
+            this.savedArray = parsed;
+            await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        // 2) try legacy globalState key 'vscode-window-tracker.added'
+        try {
+          const legacy = this.context.globalState.get<string[]>('vscode-window-tracker.added', []);
+          if (legacy && legacy.length) {
+            this.savedArray = legacy;
+            await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
+            void this.writeJson(this.savedFile, this.savedArray);
+            return;
+          }
+        } catch {
+          // ignore
+        }
+        // 3) try legacy added.json file
         try {
           const content = await fs.readFile(this.addedFile, 'utf8');
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
-            this.addedArray = parsed;
-            await this.context.globalState.update('vscode-window-tracker.added', this.addedArray);
+            this.savedArray = parsed;
+            await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
+            void this.writeJson(this.savedFile, this.savedArray);
           }
         } catch {
           // ignore
@@ -45,18 +94,28 @@ export class DataManager {
     }
   }
 
-  public getAddedArray(): string[] {
-    return [...this.addedArray];
+  // Primary API now uses 'saved' naming and persists to saved.json
+  public getSavedArray(): string[] {
+    return [...this.savedArray];
   }
 
-  public async persistAddedArray(arr: string[]): Promise<void> {
-    this.addedArray = [...arr];
+  public async persistSavedArray(arr: string[]): Promise<void> {
+    this.savedArray = [...arr];
     try {
-      await this.context.globalState.update('vscode-window-tracker.added', this.addedArray);
+      await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
     } catch {
       // ignore
     }
-    void this.writeJson(this.addedFile, this.addedArray);
+    void this.writeJson(this.savedFile, this.savedArray);
+  }
+
+  // Backwards-compatible wrappers for older API names
+  public getAddedArray(): string[] {
+    return this.getSavedArray();
+  }
+
+  public async persistAddedArray(arr: string[]): Promise<void> {
+    return this.persistSavedArray(arr);
   }
 
   private async writeJson(filePath: string, data: unknown): Promise<void> {

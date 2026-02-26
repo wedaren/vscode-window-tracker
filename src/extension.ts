@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
-import { WindowTreeDataProvider, WindowNode } from './treeProvider';
+import { WindowTreeDataProvider } from './treeProvider';
+import { WindowNode } from './types';
 import { TrackerService } from './trackerService';
 
 let trackerService: TrackerService | undefined;
