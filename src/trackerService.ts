@@ -1,28 +1,26 @@
 import * as fs from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ConfigService } from './configService';
 const configService = ConfigService.getInstance();
 
 /**
- * Tracks the current workspace/window and emits periodic heartbeats to a
- * JSON file.  Designed to be used by `DataManager` or directly in tests.
+ * Tracks the current VS Code workspace/window and writes periodic heartbeat
+ * records to a JSON file for external monitors. Intended for use by
+ * `DataManager` or directly from tests.
  *
- * 该类负责在后台定期将当前窗口/工作区状态写入一个 tracker 文件，
- * 供外部程序监视。心跳与 VS Code 窗口状态、活动编辑器事件共同
- * 驱动写操作，以保持信息最新。为了降低 I/O 频率，窗口/编辑器事件
- * 使用节流函数合并。
+ * 本类在后台维护一个会话级的 tracker 文件，周期性（以及在窗口/编辑
+ * 器状态变化时）更新当前会话信息，以便外部进程能够检测活动的 VS Code
+ * 实例与打开的工作区。
  *
- * 原理简述：
- * 1. 原子写入：先写到 `<file>.tmp` 后重命名，避免发生半写入。
- * 2. 心跳间隔可配置；配置键 `heartbeatIntervalSeconds`。
- * 3. 监听 `exit`、`SIGINT`、`SIGTERM` 和 `uncaughtException` 保证
- *    扩展停用时删除本进程对应的文件，避免残留。
- * 4. 文件路径存储在 `context.globalState`，便于跨会话恢复/清理。
+ * 要点：
+ * - 原子写入：先写入 `<file>.tmp` 再重命名以避免半写入状态。
+ * - 心跳间隔可配置，配置项为 `heartbeatIntervalSeconds`。
+ * - 监听 `exit`、`SIGINT`、`SIGTERM` 与 `uncaughtException`，确保扩展
+ *   停用或崩溃时删除本进程对应的文件以防残留。
+ * - 路径会写入 `context.globalState`，便于跨会话清理与恢复旧记录的属主信息。
  *
- * 历史说明：早期版本中此类独立存在，2026 年重构时被合并到
- * DataManager，本次又拆回单文件模块以提高测试和维护便利。
+ * 设计原则：保持实现简单、可测试，并允许通过注入 `fs` 实现进行单元测试。
  */
 export class TrackerService {
   private context: vscode.ExtensionContext;
@@ -311,6 +309,47 @@ export class TrackerService {
       }
     } catch {
       // ignore
+    }
+  }
+
+  /**
+   * Read and return all recent tracker records from disk.
+   * This mirrors the logic previously maintained by DataManager:
+   * - supports files that contain a single record, an array, or an object
+   *   with a `windows` array.
+   * - filters out stale records by `lastActive` using the same cutoff.
+   */
+  public async readTrackedRecords(): Promise<any[]> {
+    const trackerDir = configService.trackerDir;
+    const staleMinutes = configService.trackerFileStaleMinutes;
+    const cutoff = Date.now() - (staleMinutes ?? 30) * 60 * 1000;
+    try {
+      const files = await this.fsImpl.readdir(trackerDir).catch(() => []);
+      const jsonFiles = (files || []).filter((f: string) => f.endsWith('.json'));
+      const records = await Promise.all(
+        jsonFiles.map(async (file: string) => {
+          const filePath = path.join(trackerDir, file);
+          try {
+            const content = await this.fsImpl.readFile(filePath, 'utf8');
+            const raw = JSON.parse(content);
+            const candidate = Array.isArray(raw) ? raw : raw && raw.windows ? raw.windows : [raw];
+            if (Array.isArray(candidate)) {
+              const filtered = candidate.filter((r: any) => {
+                if (!r || typeof r !== 'object') return false;
+                if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
+                return true;
+              });
+              return filtered;
+            }
+          } catch {
+            // ignore read/parse errors for individual files
+          }
+          return [];
+        })
+      );
+      return records.flat();
+    } catch {
+      return [];
     }
   }
 }

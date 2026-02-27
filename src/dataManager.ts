@@ -126,31 +126,12 @@ export class DataManager {
   }
 
   private async loadTrackerFiles(): Promise<WindowRecord[]> {
-    const trackerDir = configService.trackerDir;
-    const staleMinutes = configService.trackerFileStaleMinutes;
-    const cutoff = Date.now() - (staleMinutes ?? 30) * 60 * 1000;
+    if (!this.tracker) {
+      this.tracker = new TrackerService(this.context, { fs: this.fsImpl });
+    }
     try {
-      const files = await this.fsImpl.readdir(trackerDir);
-      const jsonFiles = files.filter(file => file.endsWith('.json'));
-      const records = await Promise.all(
-        jsonFiles.map(async file => {
-          const filePath = path.join(trackerDir, file);
-          const raw = await this.readJson(filePath);
-          if (!raw) return [];
-          const candidate = Array.isArray(raw) ? raw : raw && raw.windows ? raw.windows : [raw];
-          if (Array.isArray(candidate)) {
-            const filtered = candidate.filter((r: any) => {
-              if (!r || typeof r !== 'object') return false;
-              if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
-              return true;
-            });
-
-            return filtered as WindowRecord[];
-          }
-          return [];
-        })
-      );
-      return records.flat();
+      const raw = await this.tracker.readTrackedRecords();
+      return (raw as WindowRecord[]) || [];
     } catch {
       return [];
     }
@@ -283,7 +264,6 @@ export class DataManager {
     return nodes;
   }
 
-  // ---------- tracker helpers delegated to internal class ----------
   /**
    * @docs startTracker
    * 启动内部的 `TrackerService` 开始心跳写入。
