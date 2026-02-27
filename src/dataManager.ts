@@ -39,25 +39,26 @@ export type WindowRecord = {
  * 的调用逻辑，旨在对外提供统一的接口，简化树提供者的依赖。
  */
 export class DataManager {
-  private savedFile = '';
   private trackedFile = '';
-  private savedArray: string[] = [];
-  private savedSet: Set<string> = new Set();
   private tracker?: TrackerService;
   private readonly fsImpl: typeof fs = fs;
+  private readonly savedSvc: import('./savedService').SavedService;
 
   constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
     this.fsImpl = options?.fs ?? fs;
+    // new API prefers globalStorageUri; globalStoragePath is deprecated and may
+    // be undefined.  Fall back gracefully to ensure tests/older hosts still work.
+    const storageBase = this.context.globalStorageUri?.fsPath ?? this.context.globalStoragePath ?? os.homedir();
     try {
-      void this.fsImpl.mkdir(this.context.globalStoragePath, { recursive: true });
+      void this.fsImpl.mkdir(storageBase, { recursive: true });
     } catch {
       // ignore
     }
 
     // Paths for backward-compatible storage and new 'saved' file
-    this.trackedFile = path.join(this.context.globalStoragePath || os.homedir(), 'tracked.json');
+    this.trackedFile = path.join(storageBase, 'tracked.json');
 
-    // Prefer editable saved.json inside tracker directory to allow user edits
+    // prefer editable saved.json inside tracker directory
     const trackerDir = this.resolveConfigPath('trackerDir', '~/.vscode-window-tracker');
     void (async () => {
       try {
@@ -66,35 +67,18 @@ export class DataManager {
         // ignore
       }
     })();
-    this.savedFile = path.join(trackerDir, 'saved.json');
 
-    // load saved list from global state
-    const storedSaved = this.context.globalState.get<string[]>('vscode-window-tracker.saved', []);
-    if (storedSaved && storedSaved.length) {
-      this.savedArray = storedSaved;
-    }
+    // initialize saved service after trackerDir is known
+    this.savedSvc = new (require('./savedService').SavedService)(this.context, { fs: this.fsImpl, trackerDir });
   }
 
-  // Primary API now uses 'saved' naming and persists to saved.json
-  // 返回当前保存列表的拷贝
+  // ---------- saved set helpers (delegated) ----------
   public getSavedArray(): string[] {
-    return [...this.savedArray];
+    return this.savedSvc.getSavedArray();
   }
 
-  /**
-   * 持久化保存列表：更新内存结构并写入两个存储位置
-   *  - globalState 用于扩展自身快速加载
-   *  - saved.json 允许用户手工编辑
-   */
   public async persistSavedArray(arr: string[]): Promise<void> {
-    this.savedArray = [...arr];
-    this.savedSet = new Set(this.savedArray);
-    try {
-      await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-    } catch {
-      // ignore
-    }
-    void this.writeJson(this.savedFile, this.savedArray);
+    return this.savedSvc.persistSavedArray(arr);
   }
 
 
@@ -239,30 +223,25 @@ export class DataManager {
     return [...map.values()];
   }
 
-  // ---------- saved set helpers ----------
-  // 以下方法操作 "已保存" 集合
+  // ---------- saved set helpers (delegated) ----------
   public isSaved(stableId: string): boolean {
-    return this.savedSet.has(stableId);
+    return this.savedSvc.isSaved(stableId);
   }
 
   public async save(stableId: string): Promise<void> {
-    this.savedSet.add(stableId);
-    await this.persistSavedArray([...this.savedSet]);
+    await this.savedSvc.save(stableId);
   }
 
   public async removeSaved(stableId: string): Promise<void> {
-    if (this.savedSet.has(stableId)) {
-      this.savedSet.delete(stableId);
-      await this.persistSavedArray([...this.savedSet]);
-    }
+    await this.savedSvc.remove(stableId);
   }
 
   public getAllSaved(): string[] {
-    return [...this.savedSet];
+    return this.savedSvc.getAllSaved();
   }
 
   public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
-    return [...this.savedSet].map((savedId) => this.normalizeSavedCandidate(savedId, trackedById?.get(savedId)?.lastActive));
+    return this.savedSvc.buildSavedNodes(trackedById);
   }
 
   private normalizeSavedCandidate(savedId: string, lastActiveOverride?: number): WindowNode {
