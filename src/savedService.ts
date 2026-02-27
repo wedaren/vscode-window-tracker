@@ -2,6 +2,8 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { normalizeSavedCandidate } from './helpers';
+import { WindowNode } from './types';
 
 /**
  * 管理 "已保存" 列表的存储和快照逻辑。
@@ -75,9 +77,9 @@ export class SavedService {
     return [...this.savedSet];
   }
 
-  public buildSavedNodes(trackedById?: Map<string, import('./types').WindowNode>): import('./types').WindowNode[] {
-    return [...this.savedSet].map((savedId) => 
-      import('./helpers').normalizeSavedCandidate(savedId, trackedById?.get(savedId)?.lastActive)
+  public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
+    return [...this.savedSet].map((savedId) =>
+      normalizeSavedCandidate(savedId, trackedById?.get(savedId)?.lastActive)
     );
   }
 }
