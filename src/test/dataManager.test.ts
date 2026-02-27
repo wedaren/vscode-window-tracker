@@ -22,7 +22,7 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
       update: async (_k: string, v: any) => { lastUpdate = v; },
     };
     let lastUpdate: any;
-    const ctx = { globalState: fakeGlobalState } as vscode.ExtensionContext;
+    const ctx = { globalState: fakeGlobalState, globalStoragePath: os.tmpdir() } as any as vscode.ExtensionContext;
     const dm = new DataManager(ctx, { fs: {} as any });
 
     assert.deepStrictEqual(dm.getSavedArray(), []);
@@ -71,7 +71,7 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
       get: (_k: string) => undefined,
       update: async (k: string, v: any) => { updatedKey = k; updatedValue = v; },
     } as any;
-    const ctx = { globalState: fakeGlobalState } as vscode.ExtensionContext;
+    const ctx = { globalState: fakeGlobalState, globalStoragePath: os.tmpdir() } as any as vscode.ExtensionContext;
     const dm = new DataManager(ctx, { fs: fakeFs });
 
     dm.startTracker();
@@ -106,7 +106,7 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
       get: (_k: string) => undefined,
       update: async (k: string, v: any) => { updatedKey = k; updatedValue = v; },
     } as any;
-    const ctx = { globalState: fakeGlobalState } as vscode.ExtensionContext;
+    const ctx = { globalState: fakeGlobalState, globalStoragePath: os.tmpdir() } as any as vscode.ExtensionContext;
     const svc = new TrackerService(ctx, { fs: fakeFs });
 
     svc.start();
