@@ -7,10 +7,20 @@ import * as vscode from 'vscode';
  * Tracks the current workspace/window and emits periodic heartbeats to a
  * JSON file.  Designed to be used by `DataManager` or directly in tests.
  *
- * Historically this lived in its own file; it was pulled into DataManager
- * during a large refactor but the class remained logically independent.  The
- * documentation still references a standalone module, so we recreate that
- * arrangement to keep the codebase modular and make unit testing easier.
+ * 该类负责在后台定期将当前窗口/工作区状态写入一个 tracker 文件，
+ * 供外部程序监视。心跳与 VS Code 窗口状态、活动编辑器事件共同
+ * 驱动写操作，以保持信息最新。为了降低 I/O 频率，窗口/编辑器事件
+ * 使用节流函数合并。
+ *
+ * 原理简述：
+ * 1. 原子写入：先写到 `<file>.tmp` 后重命名，避免发生半写入。
+ * 2. 心跳间隔可配置；配置键 `heartbeatIntervalSeconds`。
+ * 3. 监听 `exit`、`SIGINT`、`SIGTERM` 和 `uncaughtException` 保证
+ *    扩展停用时删除本进程对应的文件，避免残留。
+ * 4. 文件路径存储在 `context.globalState`，便于跨会话恢复/清理。
+ *
+ * 历史说明：早期版本中此类独立存在，2026 年重构时被合并到
+ * DataManager，本次又拆回单文件模块以提高测试和维护便利。
  */
 export class TrackerService {
     private context: vscode.ExtensionContext;
