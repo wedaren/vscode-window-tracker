@@ -8,10 +8,23 @@ import { WindowNode } from './types';
 /**
  * 管理 "已保存" 列表的存储和快照逻辑。
  *
- * 该类负责从 globalState 初始化列表，维护内存中的 Array + Set
- * 表示，并提供持久化到两个位置的方法：globalState 与用户可写的
- * saved.json 文件。原 DataManager 中的同名逻辑已移至此处，使业务
- * 关注点更清晰。
+ * 该类负责：
+ *
+ * 1. 从 `ExtensionContext.globalState` 初始化保存列表。
+ * 2. 在内存中使用 Array + Set 组合以便快速查找和保留顺序。
+ * 3. 将更新持久化到两个位置：
+ *    - `globalState`（扩展数据存储）
+ *    - tracker 目录下的 `saved.json`（用户可编辑）
+ *
+ * 此类与 DataManager 解耦，便于单独测试并在其他组件中复用。
+ * 它只关心保存列表本身，不处理跟踪文件或 UI 表示。
+ *
+ * 使用示例：
+ * ```ts
+ * const svc = new SavedService(context, { trackerDir: '/path/to/dir' });
+ * await svc.save('some-id');
+ * const list = svc.getSavedArray();
+ * ```
  */
 export class SavedService {
   private savedFile = '';
