@@ -17,6 +17,27 @@ export type WindowRecord = {
   status?: string;
 };
 
+/**
+ * 管理保存和跟踪窗口记录的核心服务。负责：
+ *
+ * 1. 从多种来源（daemon 文件、tracker 目录、当前工作区）收集
+ *    窗口信息并去重。
+ * 2. 维护用户“已保存”列表，对外提供增删查改接口并持久化到
+ *    可编辑的 saved.json 以及 globalState 中。
+ * 3. 启动/停止 `TrackerService` 以产生实时心跳文件。
+ * 4. 为树视图提供格式化、图标、上下文值等辅助函数。
+ *
+ * 原理简述：
+ * - 去重通过若干字段（URI、路径、标题）生成键，并保留最新的
+ *   lastActive 记录。
+ * - 保存列表使用 Array+Set 组合，保证顺序可预测、查找快速。
+ * - 所有路径相关配置会展开 `~`，并优先读取用户可编辑的 tracker
+ *   目录下的 saved.json。
+ * - I/O 操作抽象为可替换的 `fsImpl`，方便单元测试注入模拟文件系统。
+ *
+ * 该类已经整合原先的 SavedService、TrackedService 和 TrackerService
+ * 的调用逻辑，旨在对外提供统一的接口，简化树提供者的依赖。
+ */
 export class DataManager {
   private savedFile = '';
   private trackedFile = '';
