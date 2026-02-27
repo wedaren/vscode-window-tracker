@@ -5,6 +5,7 @@ import * as vscode from 'vscode';
 import { WindowNode } from './types';
 import { buildDedupKeys, toRelativeTime, normalizeSavedCandidate } from './helpers';
 import { TrackerService } from './trackerService';
+import { SavedService } from './savedService';
 
 export type WindowRecord = {
   title?: string;
@@ -39,15 +40,15 @@ export type WindowRecord = {
  * 的调用逻辑，旨在对外提供统一的接口，简化树提供者的依赖。
  */
 export class DataManager {
-  private trackedFile = '';
+  
   private tracker?: TrackerService;
   private readonly fsImpl: typeof fs = fs;
-  private readonly savedSvc: import('./savedService').SavedService;
+  private readonly savedSvc: SavedService;
 
   constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
     this.fsImpl = options?.fs ?? fs;
-    // new API prefers globalStorageUri; globalStoragePath is deprecated and may
-    // be undefined.  Fall back gracefully to ensure tests/older hosts still work.
+    // 新的 API 首选 globalStorageUri；globalStoragePath 已弃用且可能为 undefined。
+    // 为兼容旧主机和测试环境，进行回退处理以确保正常工作。
     const storageBase = this.context.globalStorageUri?.fsPath ?? this.context.globalStoragePath ?? os.homedir();
     try {
       void this.fsImpl.mkdir(storageBase, { recursive: true });
@@ -55,10 +56,7 @@ export class DataManager {
       // ignore
     }
 
-    // Paths for backward-compatible storage and new 'saved' file
-    this.trackedFile = path.join(storageBase, 'tracked.json');
-
-    // prefer editable saved.json inside tracker directory
+    // 优先使用 tracker 目录下可编辑的 saved.json
     const trackerDir = this.resolveConfigPath('trackerDir', '~/.vscode-window-tracker');
     void (async () => {
       try {
@@ -69,10 +67,10 @@ export class DataManager {
     })();
 
     // initialize saved service after trackerDir is known
-    this.savedSvc = new (require('./savedService').SavedService)(this.context, { fs: this.fsImpl, trackerDir });
+    this.savedSvc = new SavedService(this.context, { fs: this.fsImpl, trackerDir });
   }
 
-  // ---------- saved set helpers (delegated) ----------
+  // ---------- 已保存集合助手（委托） ----------
   public getSavedArray(): string[] {
     return this.savedSvc.getSavedArray();
   }
@@ -83,15 +81,6 @@ export class DataManager {
 
 
   // 原子化写 JSON 到磁盘（先写临时文件再重命名）
-  private async writeJson(filePath: string, data: unknown): Promise<void> {
-    try {
-      const tmp = `${filePath}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
-      await fs.rename(tmp, filePath);
-    } catch {
-      // ignore
-    }
-  }
 
   /** 将 ~ 开头路径展开为用户主目录 */
   private expandHome(raw: string): string {
@@ -135,26 +124,12 @@ export class DataManager {
 
   // 从所有来源加载记录并去重
   public async loadAllRecords(): Promise<WindowRecord[]> {
-    const preferDaemon = this.getConfig<boolean>('preferDaemon', false);
-    const fromDaemon = preferDaemon ? await this.loadDaemonFile() : [];
-    if (fromDaemon && fromDaemon.length) {
-      return this.dedupe(fromDaemon);
-    }
     const fromTracker = await this.loadTrackerFiles();
     const fromWorkspace = this.loadCurrentWorkspaceRecord();
     return this.dedupe([fromWorkspace, ...fromTracker]);
   }
 
-  // 如果启用了 daemon，读取其文件内容
-  private async loadDaemonFile(): Promise<WindowRecord[]> {
-    const expanded = this.resolveConfigPath('daemonFile', '~/.vscode-window-daemon.json');
-    const parsed = await this.readJson(expanded);
-    if (!parsed) return [];
-    if (Array.isArray(parsed)) return parsed as WindowRecord[];
-    if (parsed && Array.isArray(parsed.windows)) return parsed.windows as WindowRecord[];
-    if (parsed && typeof parsed === 'object') return [parsed as WindowRecord];
-    return [];
-  }
+  // 使用 tracker 文件和当前工作区作为数据来源。
 
   // 构造当前工作区的临时记录，用于列表顶部显示
   private loadCurrentWorkspaceRecord(): WindowRecord {
@@ -189,12 +164,7 @@ export class DataManager {
             if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
             return true;
           });
-          void (async () => {
-            try {
-              const snap = filtered.map((r: any) => ({ stableId: (r.uri || r.path || r.title || '').toString(), title: r.title, path: r.path, uri: r.uri, lastActive: r.lastActive, status: r.status }));
-              await this.writeJson(this.trackedFile, snap);
-            } catch { }
-          })();
+          // snapshot write removed — no longer persist filtered tracker snapshots
           return filtered as WindowRecord[];
         }
         return [];
@@ -329,8 +299,8 @@ export function createDataManager(ctx: vscode.ExtensionContext, options?: { fs?:
 }
 
 /**
- * Determine how the given record should be displayed as a tree item title.
- * Prefers file/uri basename, falls back to the raw title string.
+ * 决定记录在树视图中显示的标题。
+ * 优先显示文件/URI 的 basename，回退为原始 title。
  */
 export function formatTitle(node: WindowNode): string {
   if (node.path) {
@@ -348,14 +318,14 @@ export function formatTitle(node: WindowNode): string {
 }
 
 /**
- * Generate a brief description shown to the right of a tree item.
+ * 生成显示在树项右侧的简短描述。
  */
 export function buildDescription(node: WindowNode): string {
   return `${node.relativeActive}`;
 }
 
 /**
- * Build the markdown tooltip for an item.
+ * 为项构建 Markdown 格式的提示信息。
  */
 export function buildTooltip(node: WindowNode): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
@@ -370,7 +340,7 @@ export function buildTooltip(node: WindowNode): vscode.MarkdownString {
 }
 
 /**
- * Context value string used for menu contributions.
+ * 用于菜单贡献的上下文值字符串。
  */
 export function buildContextValue(node: WindowNode): string {
   if (node.origin === 'saved') {
@@ -384,8 +354,8 @@ export function buildContextValue(node: WindowNode): string {
 }
 
 /**
- * Select an icon for the tree item.  `isCurrentWorkspace` should be true if the
- * record corresponds to one of the open workspace folders.
+ * 为树项选择图标。
+ * 如果记录对应当前打开的工作区文件夹，则 `isCurrentWorkspace` 应为 true。
  */
 export function getNodeIcon(node: WindowNode, isCurrentWorkspace: boolean, dataManager: DataManager): vscode.ThemeIcon {
   const added = (typeof node.isSaved === 'boolean') ? node.isSaved : dataManager.isSaved(node.stableId);
@@ -399,12 +369,12 @@ export function getNodeIcon(node: WindowNode, isCurrentWorkspace: boolean, dataM
 }
 
 /**
- * Compute relative age string (delegates to helper for consistency).
+ * 计算相对时间字符串（委托给 helper 保持一致）。
  */
 export { toRelativeTime };
 
 /**
- * Convert path/uri pair into a Uri object suitable for `openFolder`.
+ * 将 path/uri 对转换为适用于 openFolder 的 Uri 对象。
  */
 export function toDirUri(recordPath?: string, recordUri?: string): vscode.Uri | undefined {
   if (recordUri) {
@@ -421,8 +391,7 @@ export function toDirUri(recordPath?: string, recordUri?: string): vscode.Uri | 
 }
 
 /**
- * Returns true if the provided record path or uri matches one of the
- * workspace folders.
+ * 如果提供的记录 path 或 uri 与任意工作区文件夹匹配则返回 true。
  */
 export function isCurrentWorkspace(recordPath?: string, recordUri?: string): boolean {
   if (!vscode.workspace.workspaceFolders || vscode.workspace.workspaceFolders.length === 0) {
