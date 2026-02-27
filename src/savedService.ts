@@ -37,7 +37,6 @@ export class SavedService {
     const trackerDir = options?.trackerDir ?? os.homedir();
     this.savedFile = path.join(trackerDir, 'saved.json');
 
-    // fast initialize, ignore errors
     const stored = this.context.globalState.get<string[]>('vscode-window-tracker.saved', []);
     if (stored && stored.length) {
       this.savedArray = stored;
@@ -45,19 +44,24 @@ export class SavedService {
     }
   }
 
-  // 获取当前保存列表拷贝
+  /**
+   * @docs getSavedArray
+   * 获取当前保存列表的拷贝。
+   */
   public getSavedArray(): string[] {
     return [...this.savedArray];
   }
 
-  // 持久化保存数组到 globalState 和 JSON 文件
+  /**
+   * @docs persistSavedArray
+   * 将保存数组持久化到 `globalState` 和磁盘 `saved.json` 文件。
+   */
   public async persistSavedArray(arr: string[]): Promise<void> {
     this.savedArray = [...arr];
     this.savedSet = new Set(this.savedArray);
     try {
       await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
     } catch {
-      // ignore
     }
     void this.writeJson(this.savedFile, this.savedArray);
   }
@@ -73,18 +77,27 @@ export class SavedService {
     }
   }
 
-  // 检查给定 id 是否已保存
+  /**
+   * @docs isSaved
+   * 检查给定 id 是否已被保存。
+   */
   public isSaved(id: string): boolean {
     return this.savedSet.has(id);
   }
 
-  // 添加一个 id 到保存列表并持久化
+  /**
+   * @docs save
+   * 将 id 添加到保存集合并持久化。
+   */
   public async save(id: string): Promise<void> {
     this.savedSet.add(id);
     await this.persistSavedArray([...this.savedSet]);
   }
 
-  // 从保存列表移除一个 id 并持久化
+  /**
+   * @docs remove
+   * 从保存集合移除 id 并持久化。
+   */
   public async remove(id: string): Promise<void> {
     if (this.savedSet.has(id)) {
       this.savedSet.delete(id);
@@ -92,12 +105,18 @@ export class SavedService {
     }
   }
 
-  // 返回保存集合的所有元素
+  /**
+   * @docs getAllSaved
+   * 返回保存集合中的所有 id。
+   */
   public getAllSaved(): string[] {
     return [...this.savedSet];
   }
 
-  // 将保存 id 列表转成 WindowNode 数组（供树视图使用）
+  /**
+   * @docs buildSavedNodes
+   * 将保存 id 列表转换为供树视图使用的 `WindowNode` 数组。
+   */
   public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
     return [...this.savedSet].map((savedId) =>
       normalizeSavedCandidate(savedId, trackedById?.get(savedId)?.lastActive)

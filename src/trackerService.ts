@@ -2,6 +2,8 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { ConfigService } from './configService';
+const configService = ConfigService.getInstance();
 
 /**
  * Tracks the current workspace/window and emits periodic heartbeats to a
@@ -24,11 +26,7 @@ import * as vscode from 'vscode';
  */
 export class TrackerService {
     private context: vscode.ExtensionContext;
-    private trackerDir: string;
     private trackerFilePath: string | undefined;
-    private heartbeatSeconds: number;
-    private staleMinutes: number;
-    private autoCleanup: boolean;
     private timer: NodeJS.Timeout | undefined;
     private windowStateListener: vscode.Disposable | undefined;
     private activeEditorListener: vscode.Disposable | undefined;
@@ -44,25 +42,19 @@ export class TrackerService {
     private readonly fsImpl: typeof fs = fs;
 
     constructor(context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
-        this.context = context;
-        this.fsImpl = options?.fs ?? fs;
-        const cfg = vscode.workspace.getConfiguration('vscode-window-tracker');
-        const rawTrackerDir = cfg.get<string>('trackerDir', '~/.vscode-window-tracker')!;
-        this.trackerDir = rawTrackerDir.replace(/^~(?=$|\/|\\)/, os.homedir());
-        this.heartbeatSeconds = cfg.get<number>('heartbeatIntervalSeconds', 5) ?? 5;
-        this.staleMinutes = cfg.get<number>('trackerFileStaleMinutes', 30) ?? 30;
-        this.autoCleanup = cfg.get<boolean>('trackerAutoCleanup', true) ?? true;
+                this.context = context;
+                this.fsImpl = options?.fs ?? fs;
 
         this.trackerFilePath = undefined;
 
         this.boundExitHandler = () => {
             if (this.trackerFilePath) {
-            try {
-                // The 'exit' handler must be synchronous.
-                require('fs').unlinkSync(this.trackerFilePath);
-            } catch {
-                // ignore, file might not exist
-            }
+                try {
+                    // The 'exit' handler must be synchronous.
+                    require('fs').unlinkSync(this.trackerFilePath);
+                } catch {
+                    // ignore, file might not exist
+                }
             }
         };
         this.boundSigintHandler = () => { process.exit(130); };
@@ -81,7 +73,7 @@ export class TrackerService {
         void this.writeNow();
 
         // 设置心跳定时器，定期更新文件内容。
-        this.timer = setInterval(() => { void this.writeNow(); }, this.heartbeatSeconds * 1000);
+        this.timer = setInterval(() => { void this.writeNow(); }, configService.heartbeatIntervalSeconds * 1000);
 
         // 监听 VS Code 窗口状态和活动编辑器变化，事件可能非常频繁；
         // 使用 scheduleWrite() 来节流，避免在短时间内多次 I/O。
@@ -90,7 +82,7 @@ export class TrackerService {
 
         // 注册进程信号处理，确保在退出或异常时删除 tracker 文件。
         process.on('exit', this.boundExitHandler);
-        
+
         // 清除任何挂起的写入计划（理论上不会有）。
         if (this.pendingWrite) {
             clearTimeout(this.pendingWrite);
@@ -133,7 +125,7 @@ export class TrackerService {
     async ensureDir(): Promise<void> {
         // 确保 tracker 目录存在；失败时静默忽略。
         try {
-            await this.fsImpl.mkdir(this.trackerDir, { recursive: true });
+            await this.fsImpl.mkdir(configService.trackerDir, { recursive: true });
         } catch {
             // ignore
         }
@@ -169,7 +161,7 @@ export class TrackerService {
 
         if (!this.trackerFilePath) {
             const fname = `vscode-${process.pid}-${Date.now()}.json`;
-            this.trackerFilePath = path.join(this.trackerDir, fname);
+            this.trackerFilePath = path.join(configService.trackerDir, fname);
         }
 
         const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -257,7 +249,11 @@ export class TrackerService {
      * 辅助函数：在短时间内多次调用时只执行一次 `writeNow`。
      * 防止焦点切换/编辑器变更等事件导致频繁 I/O。
      */
-    private scheduleWrite(): void {
+    /**
+     * @docs scheduleWrite
+     * 合并短时间内多个写入请求，延迟并只执行一次 `writeNow`。
+     */
+    public scheduleWrite(): void {
         if (this.pendingWrite) {
             clearTimeout(this.pendingWrite);
         }
@@ -270,19 +266,19 @@ export class TrackerService {
 
     private async startupCleanup(): Promise<void> {
         // 清理 trackerDir 中过期的 json 文件。
-        if (!this.autoCleanup) return;
+        if (!configService.trackerAutoCleanup) return;
         try {
-            const cutoff = Date.now() - this.staleMinutes * 60 * 1000;
-            const files = await this.fsImpl.readdir(this.trackerDir).catch(() => []);
+            const cutoff = Date.now() - configService.trackerFileStaleMinutes * 60 * 1000;
+            const files = await this.fsImpl.readdir(configService.trackerDir).catch(() => []);
             for (const f of files) {
                 if (!f.endsWith('.json')) continue;
-                const fp = path.join(this.trackerDir, f);
+                const fp = path.join(configService.trackerDir, f);
                 try {
                     const c = await this.fsImpl.readFile(fp, 'utf8');
                     const parsed = JSON.parse(c);
                     const last = parsed && typeof parsed.lastActive === 'number' ? parsed.lastActive : undefined;
                     if (last && last < cutoff) {
-                        await this.fsImpl.unlink(fp).catch(() => {});
+                        await this.fsImpl.unlink(fp).catch(() => { });
                     }
                 } catch {
                     // ignore parse/read errors

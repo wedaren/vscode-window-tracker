@@ -8,7 +8,7 @@ let extContext: vscode.ExtensionContext | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
 
-	// store context for deactivate cleanup
+	
 	extContext = context;
 	const provider = new WindowTreeDataProvider(context);
 	vscode.window.createTreeView('vscode-window-tracker.windowsView', {
@@ -40,7 +40,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	provider.startHeartbeat(context);
 
-	// start tracker logic via DataManager
 	dataManager = createDataManager(context);
 	dataManager.startTracker();
 	context.subscriptions.push({ dispose: () => { dataManager?.stopTracker(); } });

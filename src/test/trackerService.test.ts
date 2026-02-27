@@ -6,17 +6,17 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
   const origGetConfig = vscode.workspace.getConfiguration;
 
   setup(() => {
-    // 将配置钩子替换为默认值，避免依赖真实 workspace
+    
     (vscode.workspace as any).getConfiguration = (_: any) => ({ get: (_k: any, d: any) => d });
   });
 
   teardown(() => {
-    // 恢复原始配置函数
+    
     (vscode.workspace as any).getConfiguration = origGetConfig;
   });
 
   test('场景1：writeNow 写入文件并记录路径', async () => {
-    // 使用假的 fs 和 globalState 观察副作用
+    
     let wroteTmp: { path?: string; data?: string } = {};
     let renamed: { src?: string; dest?: string } = {};
     let updatedKey: string | undefined;
@@ -64,7 +64,7 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
     const ctx = { globalState: fakeGlobalState } as vscode.ExtensionContext;
     const svc = new TrackerService(ctx, { fs: fakeFs2 });
 
-    // 私有方法，通过 any 绕过类型检查
+    
     await (svc as any).startupCleanup();
 
     assert.ok(deleted.some(d => d.endsWith('old.json')), '旧文件应被删除');
@@ -106,12 +106,12 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
     let count = 0;
     (svc as any).writeNow = async () => { count += 1; };
 
-    // 连续调用多次 scheduleWrite
+    
     svc.scheduleWrite();
     svc.scheduleWrite();
     svc.scheduleWrite();
 
-    // 等待 150ms 让定时器触发
+    
     await new Promise((r) => setTimeout(r, 150));
     assert.strictEqual(count, 1, '多次调用应合并为一次写入');
   });

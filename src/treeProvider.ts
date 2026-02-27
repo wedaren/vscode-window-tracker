@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { createDataManager } from './dataManager';
+import { ConfigService } from './configService';
+const configService = ConfigService.getInstance();
 import { WindowNode } from './types';
 import { formatTitle, buildDescription, buildTooltip, buildContextValue, getNodeIcon, isCurrentWorkspace } from './dataManager';
 
@@ -21,15 +23,23 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 
 
+	/**
+	 * @docs startHeartbeat
+	 * 启动 view 的心跳刷新机制（基于配置的间隔）。
+	 */
 	public startHeartbeat(context: vscode.ExtensionContext): void {
 		void this.refresh();
-		const interval = this.dataManager.getConfig<number>('heartbeatIntervalSeconds', 5) * 1000;
+		const interval = configService.heartbeatIntervalSeconds * 1000;
 		const timer = setInterval(() => {
 			void this.refresh();
 		}, interval);
 		context.subscriptions.push({ dispose: () => clearInterval(timer) });
 	}
 
+	/**
+	 * @docs addProjectByNode
+	 * 根据节点或选择的文件夹添加项目到保存列表。
+	 */
 	public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<void> {
 		let targetUri = dirUri;
 		if (!targetUri && node && node.dirUri) {
@@ -44,15 +54,23 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		}
 		const stableId = node?.stableId ?? targetUri.toString();
 		await this.dataManager.save(stableId);
-		// refresh asynchronously to avoid blocking command execution
+		
 		void this.refresh(true);
 	}
 
+	/**
+	 * @docs removeProjectById
+	 * 从保存列表中移除指定 `stableId` 并刷新视图。
+	 */
 	public async removeProjectById(stableId: string): Promise<void> {
 		await this.dataManager.removeSaved(stableId);
 		void this.refresh(true);
 	}
 
+	/**
+	 * @docs refresh
+	 * 刷新树数据，必要时触发视图更新。
+	 */
 	public async refresh(force = false): Promise<void> {
 		this.nodes = await this.dataManager.getWindowNodes();
 		const hash = JSON.stringify(this.nodes.map((item) => ({ id: item.stableId, relativeActive: item.relativeActive, path: item.path, title: item.title })));
@@ -62,6 +80,10 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		}
 	}
 
+	/**
+	 * @docs getTreeItem
+	 * 将 `WindowNode` 转换为 VS Code 的 `TreeItem` 表示。
+	 */
 	public getTreeItem(element: WindowNode): vscode.TreeItem {
 		const title = formatTitle(element);
 		const item = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
@@ -70,13 +92,12 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		item.description = buildDescription(element);
 		item.tooltip = buildTooltip(element);
 		item.contextValue = buildContextValue(element);
-		try {
-			if (element.origin === 'saved') {
-				console.debug(`[vscode-window-tracker] contextValue for ${item.id}: ${item.contextValue}`);
+			try {
+				if (element.origin === 'saved') {
+					console.debug(`[vscode-window-tracker] contextValue for ${item.id}: ${item.contextValue}`);
+				}
+			} catch {
 			}
-		} catch {
-			// ignore logging errors
-		}
 		const current = isCurrentWorkspace(element.path, element.uri);
 		if (current) {
 			item.label = { label: title, highlights: [[0, title.length]] };
@@ -88,6 +109,10 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		return item;
 	}
 
+	/**
+	 * @docs getChildren
+	 * 返回给定节点的子节点（无节点则返回根节点列表或占位项）。
+	 */
 	public async getChildren(element?: WindowNode): Promise<WindowNode[]> {
 		if (!element) {
 			if (this.nodes.length === 0) {
@@ -119,13 +144,6 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 
 
-	// helper methods have been moved to viewHelpers.ts
 
-	// icon logic moved to viewHelpers
 
-	// moved to viewHelpers by proxy export
-
-	// dereferenced to viewHelpers
-
-	// workspace-matching logic lives in viewHelpers
 }

@@ -2,6 +2,8 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { ConfigService } from './configService';
+const configService = ConfigService.getInstance();
 import { WindowNode } from './types';
 import { buildDedupKeys, toRelativeTime, normalizeSavedCandidate } from './helpers';
 import { TrackerService } from './trackerService';
@@ -47,45 +49,41 @@ export class DataManager {
 
   constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
     this.fsImpl = options?.fs ?? fs;
-    // 新的 API 首选 globalStorageUri；globalStoragePath 已弃用且可能为 undefined。
-    // 为兼容旧主机和测试环境，进行回退处理以确保正常工作。
     const storageBase = this.context.globalStorageUri?.fsPath ?? this.context.globalStoragePath ?? os.homedir();
     try {
       void this.fsImpl.mkdir(storageBase, { recursive: true });
     } catch {
-      // ignore
     }
 
-    // 优先使用 tracker 目录下可编辑的 saved.json
-    const trackerDir = this.resolveConfigPath('trackerDir', '~/.vscode-window-tracker');
+    const trackerDir = configService.trackerDir;
     void (async () => {
       try {
         await this.fsImpl.mkdir(trackerDir, { recursive: true });
       } catch {
-        // ignore
       }
     })();
 
-    // initialize saved service after trackerDir is known
+    
     this.savedSvc = new SavedService(this.context, { fs: this.fsImpl, trackerDir });
   }
 
-  // ---------- 已保存集合助手（委托） ----------
+  
+  /**
+   * @docs getSavedArray
+   * 返回 `SavedService` 当前的保存数组拷贝。
+   */
   public getSavedArray(): string[] {
     return this.savedSvc.getSavedArray();
   }
 
+  /**
+   * @docs persistSavedArray
+   * 将保存数组持久化到 `globalState` 与 `saved.json`。
+   */
   public async persistSavedArray(arr: string[]): Promise<void> {
     return this.savedSvc.persistSavedArray(arr);
   }
 
-
-  // 原子化写 JSON 到磁盘（先写临时文件再重命名）
-
-  /** 将 ~ 开头路径展开为用户主目录 */
-  private expandHome(raw: string): string {
-    return raw.replace(/^~(?=$|\/|\\)/, os.homedir());
-  }
 
   /**
    * 从磁盘读取并解析 JSON，失败时返回 undefined（不会抛出）。
@@ -99,39 +97,29 @@ export class DataManager {
     }
   }
 
-  /**
-   * 获取配置项并展开 '~'。主要用于目录或文件路径。
-   */
-  private resolveConfigPath(key: string, fallback: string): string {
-    const raw = this.getConfig<string>(key, fallback);
-    return this.expandHome(raw);
-  }
-
 
   /**
-   * 获取扩展配置项，若未设置则返回默认值。公开给 UI 模块使用。
+   * @docs buildDedupKeys
+   * 包装器：为给定记录生成去重键数组。
    */
-  public getConfig<T = any>(key: string, fallback?: T): T {
-    const cfg = vscode.workspace.getConfiguration('vscode-window-tracker');
-    const val = cfg.get<T>(key as any);
-    return (val === undefined ? (fallback as T) : val) as T;
-  }
-
   public buildDedupKeys(record: WindowRecord): string[] {
-    // wrapper preserved for backwards compatibility
     return buildDedupKeys(record);
   }
 
-  // 从所有来源加载记录并去重
+  
+  /**
+   * @docs loadAllRecords
+   * 从 tracker 文件和当前 workspace 读取并合并所有记录（含去重）。
+   */
   public async loadAllRecords(): Promise<WindowRecord[]> {
     const fromTracker = await this.loadTrackerFiles();
     const fromWorkspace = this.loadCurrentWorkspaceRecord();
     return this.dedupe([fromWorkspace, ...fromTracker]);
   }
 
-  // 使用 tracker 文件和当前工作区作为数据来源。
+  
 
-  // 构造当前工作区的临时记录，用于列表顶部显示
+  
   private loadCurrentWorkspaceRecord(): WindowRecord {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     const folderPath = workspaceFolder?.uri.fsPath;
@@ -145,10 +133,10 @@ export class DataManager {
     };
   }
 
-  // 从 tracker 目录读取所有 JSON 文件，忽略过期项
+  
   private async loadTrackerFiles(): Promise<WindowRecord[]> {
-    const trackerDir = this.resolveConfigPath('trackerDir', '~/.vscode-window-tracker');
-    const staleMinutes = this.getConfig<number>('trackerFileStaleMinutes', 30);
+    const trackerDir = configService.trackerDir;
+    const staleMinutes = configService.trackerFileStaleMinutes;
     const cutoff = Date.now() - (staleMinutes ?? 30) * 60 * 1000;
     try {
       const files = await this.fsImpl.readdir(trackerDir);
@@ -164,7 +152,7 @@ export class DataManager {
             if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
             return true;
           });
-          // snapshot write removed — no longer persist filtered tracker snapshots
+          
           return filtered as WindowRecord[];
         }
         return [];
@@ -175,7 +163,7 @@ export class DataManager {
     }
   }
 
-  // 根据去重键保留最新记录
+  
   private dedupe(records: WindowRecord[]): WindowRecord[] {
     const map = new Map<string, WindowRecord>();
     for (const record of records) {
@@ -193,23 +181,43 @@ export class DataManager {
     return [...map.values()];
   }
 
-  // ---------- saved set helpers (delegated) ----------
+  
+  /**
+   * @docs isSaved
+   * 判断给定的 `stableId` 是否在保存集合中。
+   */
   public isSaved(stableId: string): boolean {
     return this.savedSvc.isSaved(stableId);
   }
 
+  /**
+   * @docs save
+   * 将给定 `stableId` 添加到保存集合并持久化。
+   */
   public async save(stableId: string): Promise<void> {
     await this.savedSvc.save(stableId);
   }
 
+  /**
+   * @docs removeSaved
+   * 从保存集合移除给定 `stableId` 并持久化。
+   */
   public async removeSaved(stableId: string): Promise<void> {
     await this.savedSvc.remove(stableId);
   }
 
+  /**
+   * @docs getAllSaved
+   * 返回保存集合的所有元素数组。
+   */
   public getAllSaved(): string[] {
     return this.savedSvc.getAllSaved();
   }
 
+  /**
+   * @docs buildSavedNodes
+   * 将保存 id 列表转换为 `WindowNode` 数组，供树视图使用。
+   */
   public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
     return this.savedSvc.buildSavedNodes(trackedById);
   }
@@ -218,8 +226,11 @@ export class DataManager {
     return normalizeSavedCandidate(savedId, lastActiveOverride);
   }
 
-  // ---------- tracked helpers ----------
-  // 将 WindowRecord 转换为 Tree 节点
+  
+  /**
+   * @docs normalizeTrackedNodes
+   * 将原始 `WindowRecord` 列表转换为用于 UI 的 `WindowNode` 数组并排序。
+   */
   public normalizeTrackedNodes(records: WindowRecord[]): WindowNode[] {
     const now = Date.now();
     const enriched: WindowNode[] = records.map((record, index) => {
@@ -252,10 +263,13 @@ export class DataManager {
     const sorted = enriched.sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0));
     return sorted;
   }
-
-
+    
   // ---------- combined node list ----------
   // 合并已保存和跟踪节点，确保排序和标记
+  /**
+   * @docs getWindowNodes
+   * 合并并返回树视图所需的完整节点列表（已保存 + 跟踪）。
+   */
   public async getWindowNodes(): Promise<WindowNode[]> {
     const loaded = await this.loadAllRecords();
     const trackedNodes = this.normalizeTrackedNodes(loaded);
@@ -279,6 +293,10 @@ export class DataManager {
   }
 
   // ---------- tracker helpers delegated to internal class ----------
+  /**
+   * @docs startTracker
+   * 启动内部的 `TrackerService` 开始心跳写入。
+   */
   public startTracker(): void {
     if (!this.tracker) {
       this.tracker = new TrackerService(this.context, { fs: this.fsImpl });
@@ -286,6 +304,10 @@ export class DataManager {
     this.tracker.start();
   }
 
+  /**
+   * @docs stopTracker
+   * 停止并清理内部的 `TrackerService`。
+   */
   public stopTracker(): void {
     if (this.tracker) {
       this.tracker.stop();
