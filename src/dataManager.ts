@@ -32,72 +32,29 @@ export class DataManager {
     } catch {
       // ignore
     }
+
     // Paths for backward-compatible storage and new 'saved' file
     this.addedFile = path.join(this.context.globalStoragePath || os.homedir(), 'added.json');
     this.trackedFile = path.join(this.context.globalStoragePath || os.homedir(), 'tracked.json');
 
-    // Prefer storing the editable `saved.json` inside the user-visible
-    // tracker directory so users can batch-edit it. Use configured
-    // `vscode-window-tracker.trackerDir` (default ~/.vscode-window-tracker).
-    try {
-      const rawTracker = this.getConfig<string>('trackerDir', '~/.vscode-window-tracker');
-      const trackerDir = rawTracker.replace(/^~(?=$|\/|\\)/, os.homedir());
-      void (async () => {
-        try {
-          await this.fsImpl.mkdir(trackerDir, { recursive: true });
-        } catch {
-          // ignore
-        }
-      })();
-      this.savedFile = path.join(trackerDir, 'saved.json');
-    } catch {
-      // fallback to extension storage
-      this.savedFile = path.join(this.context.globalStoragePath || os.homedir(), 'saved.json');
-    }
+    // Prefer editable saved.json inside tracker directory to allow user edits
+    const rawTracker = this.getConfig<string>('trackerDir', '~/.vscode-window-tracker');
+    const trackerDir = this.expandHome(rawTracker);
+    void (async () => {
+      try {
+        await this.fsImpl.mkdir(trackerDir, { recursive: true });
+      } catch {
+        // ignore
+      }
+    })();
+    this.savedFile = path.join(trackerDir, 'saved.json');
 
-    // Try to load the new 'saved' key first; fall back to legacy 'added' key/file and migrate.
+    // load or migrate saved list
     const storedSaved = this.context.globalState.get<string[]>('vscode-window-tracker.saved', []);
     if (storedSaved && storedSaved.length) {
       this.savedArray = storedSaved;
     } else {
-      void (async () => {
-        // 1) try saved.json file
-        try {
-          const content = await this.fsImpl.readFile(this.savedFile, 'utf8');
-          const parsed = JSON.parse(content);
-          if (Array.isArray(parsed)) {
-            this.savedArray = parsed;
-            await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-            return;
-          }
-        } catch {
-          // ignore
-        }
-        // 2) try legacy globalState key 'vscode-window-tracker.added'
-        try {
-          const legacy = this.context.globalState.get<string[]>('vscode-window-tracker.added', []);
-          if (legacy && legacy.length) {
-            this.savedArray = legacy;
-            await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-            void this.writeJson(this.savedFile, this.savedArray);
-            return;
-          }
-        } catch {
-          // ignore
-        }
-        // 3) try legacy added.json file
-        try {
-          const content = await this.fsImpl.readFile(this.addedFile, 'utf8');
-          const parsed = JSON.parse(content);
-          if (Array.isArray(parsed)) {
-            this.savedArray = parsed;
-            await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-            void this.writeJson(this.savedFile, this.savedArray);
-          }
-        } catch {
-          // ignore
-        }
-      })();
+      void this.migrateSaved();
     }
   }
 
@@ -136,6 +93,56 @@ export class DataManager {
     }
   }
 
+  /** Expand leading ~ to user home directory */
+  private expandHome(raw: string): string {
+    return raw.replace(/^~(?=$|\/|\\)/, os.homedir());
+  }
+
+  /**
+   * Safely read JSON from a file.  Returns undefined if the file does not
+   * exist or cannot be parsed.
+   */
+  private async readJson(filePath: string): Promise<any | undefined> {
+    try {
+      const content = await this.fsImpl.readFile(filePath, 'utf8');
+      return JSON.parse(content);
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Performs legacy migration logic originally in constructor.
+   */
+  private async migrateSaved(): Promise<void> {
+    // 1) try saved.json file
+    const arr = await this.readJson(this.savedFile);
+    if (Array.isArray(arr)) {
+      this.savedArray = arr;
+      await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
+      return;
+    }
+    // 2) legacy globalState
+    try {
+      const legacy = this.context.globalState.get<string[]>('vscode-window-tracker.added', []);
+      if (legacy && legacy.length) {
+        this.savedArray = legacy;
+        await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
+        void this.writeJson(this.savedFile, this.savedArray);
+        return;
+      }
+    } catch {
+      // ignore
+    }
+    // 3) legacy added.json
+    const arr2 = await this.readJson(this.addedFile);
+    if (Array.isArray(arr2)) {
+      this.savedArray = arr2;
+      await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
+      void this.writeJson(this.savedFile, this.savedArray);
+    }
+  }
+
   /**
    * Read an individual extension configuration value, providing a default
    * when the key is absent.  Exposed publicly so that UI components (such as
@@ -165,17 +172,13 @@ export class DataManager {
 
   private async loadDaemonFile(): Promise<WindowRecord[]> {
     const rawPath = this.getConfig<string>('daemonFile', '~/.vscode-window-daemon.json');
-    const expanded = rawPath.replace(/^~(?=$|\/|\\)/, os.homedir());
-    try {
-      const content = await fs.readFile(expanded, 'utf8');
-      const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed as WindowRecord[];
-      if (parsed && Array.isArray(parsed.windows)) return parsed.windows as WindowRecord[];
-      if (parsed && typeof parsed === 'object') return [parsed as WindowRecord];
-      return [];
-    } catch {
-      return [];
-    }
+    const expanded = this.expandHome(rawPath);
+    const parsed = await this.readJson(expanded);
+    if (!parsed) return [];
+    if (Array.isArray(parsed)) return parsed as WindowRecord[];
+    if (parsed && Array.isArray(parsed.windows)) return parsed.windows as WindowRecord[];
+    if (parsed && typeof parsed === 'object') return [parsed as WindowRecord];
+    return [];
   }
 
   private loadCurrentWorkspaceRecord(): WindowRecord {
@@ -193,7 +196,7 @@ export class DataManager {
 
   private async loadTrackerFiles(): Promise<WindowRecord[]> {
     const raw = this.getConfig<string>('trackerDir', '~/.vscode-window-tracker');
-    const trackerDir = raw.replace(/^~(?=$|\/|\\)/, os.homedir());
+    const trackerDir = this.expandHome(raw);
     const staleMinutes = this.getConfig<number>('trackerFileStaleMinutes', 30);
     const cutoff = Date.now() - (staleMinutes ?? 30) * 60 * 1000;
     try {
@@ -201,29 +204,24 @@ export class DataManager {
       const jsonFiles = files.filter((file) => file.endsWith('.json'));
       const records = await Promise.all(jsonFiles.map(async (file) => {
         const filePath = path.join(trackerDir, file);
-        try {
-          const content = await this.fsImpl.readFile(filePath, 'utf8');
-          const raw = JSON.parse(content);
-          const candidate = Array.isArray(raw) ? raw : (raw && raw.windows ? raw.windows : [raw]);
-          if (Array.isArray(candidate)) {
-            const filtered = candidate.filter((r: any) => {
-              if (!r || typeof r !== 'object') return false;
-              if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
-              return true;
-            });
-            // write tracked snapshot
-            void (async () => {
-              try {
-                const snap = filtered.map((r: any) => ({ stableId: (r.uri || r.path || r.title || '').toString(), title: r.title, path: r.path, uri: r.uri, lastActive: r.lastActive, status: r.status }));
-                await this.writeJson(this.trackedFile, snap);
-              } catch { }
-            })();
-            return filtered as WindowRecord[];
-          }
-          return [];
-        } catch {
-          return [];
+        const raw = await this.readJson(filePath);
+        if (!raw) return [];
+        const candidate = Array.isArray(raw) ? raw : (raw && raw.windows ? raw.windows : [raw]);
+        if (Array.isArray(candidate)) {
+          const filtered = candidate.filter((r: any) => {
+            if (!r || typeof r !== 'object') return false;
+            if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
+            return true;
+          });
+          void (async () => {
+            try {
+              const snap = filtered.map((r: any) => ({ stableId: (r.uri || r.path || r.title || '').toString(), title: r.title, path: r.path, uri: r.uri, lastActive: r.lastActive, status: r.status }));
+              await this.writeJson(this.trackedFile, snap);
+            } catch { }
+          })();
+          return filtered as WindowRecord[];
         }
+        return [];
       }));
       return records.flat();
     } catch {
