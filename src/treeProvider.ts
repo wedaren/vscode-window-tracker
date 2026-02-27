@@ -44,12 +44,13 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		}
 		const stableId = node?.stableId ?? targetUri.toString();
 		await this.dataManager.save(stableId);
-		await this.refresh(true);
+		// refresh asynchronously to avoid blocking command execution
+		void this.refresh(true);
 	}
 
 	public async removeProjectById(stableId: string): Promise<void> {
 		await this.dataManager.removeSaved(stableId);
-		await this.refresh(true);
+		void this.refresh(true);
 	}
 
 	public async refresh(force = false): Promise<void> {
