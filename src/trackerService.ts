@@ -1,8 +1,17 @@
-import * as vscode from 'vscode';
 import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
+import * as vscode from 'vscode';
 
+/**
+ * Tracks the current workspace/window and emits periodic heartbeats to a
+ * JSON file.  Designed to be used by `DataManager` or directly in tests.
+ *
+ * Historically this lived in its own file; it was pulled into DataManager
+ * during a large refactor but the class remained logically independent.  The
+ * documentation still references a standalone module, so we recreate that
+ * arrangement to keep the codebase modular and make unit testing easier.
+ */
 export class TrackerService {
     private context: vscode.ExtensionContext;
     private trackerDir: string;
@@ -19,7 +28,7 @@ export class TrackerService {
     private boundUncaughtHandler: (error: Error) => void;
 
     // allow injecting an fs-like implementation for testing
-    private readonly fsImpl: typeof fs;
+    private readonly fsImpl: typeof fs = fs;
 
     constructor(context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
         this.context = context;
@@ -237,5 +246,3 @@ export class TrackerService {
         }
     }
 }
-
-export default TrackerService;

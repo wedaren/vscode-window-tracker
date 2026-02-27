@@ -1,9 +1,9 @@
 import * as vscode from 'vscode';
 import { WindowTreeDataProvider } from './treeProvider';
 import { WindowNode } from './types';
-import { TrackerService } from './trackerService';
+import { createDataManager } from './dataManager';
 
-let trackerService: TrackerService | undefined;
+let dataManager: ReturnType<typeof createDataManager> | undefined;
 let extContext: vscode.ExtensionContext | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
@@ -40,11 +40,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	provider.startHeartbeat(context);
 
-	// Start tracker service to manage tracker file lifecycle
-	trackerService = new TrackerService(context);
-	trackerService.start();
-	// ensure tracker is stopped when extension disposes
-	context.subscriptions.push({ dispose: () => { trackerService?.stop(); } });
+	// start tracker logic via DataManager
+	dataManager = createDataManager(context);
+	dataManager.startTracker();
+	context.subscriptions.push({ dispose: () => { dataManager?.stopTracker(); } });
 
 }
 
