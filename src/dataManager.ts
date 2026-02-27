@@ -2,6 +2,8 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
+import { WindowNode } from './types';
+import { buildDedupKeys, toRelativeTime, normalizeSavedCandidate } from './helpers';
 
 export type WindowRecord = {
   title?: string;
@@ -19,9 +21,14 @@ export class DataManager {
   private savedFile = '';
   private trackedFile = '';
   private savedArray: string[] = [];
-  constructor(private readonly context: vscode.ExtensionContext) {
+  private savedSet: Set<string> = new Set();
+  private tracker?: TrackerService;
+  private readonly fsImpl: typeof fs = fs;
+
+  constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
+    this.fsImpl = options?.fs ?? fs;
     try {
-      void fs.mkdir(this.context.globalStoragePath, { recursive: true });
+      void this.fsImpl.mkdir(this.context.globalStoragePath, { recursive: true });
     } catch {
       // ignore
     }
@@ -37,7 +44,7 @@ export class DataManager {
       const trackerDir = rawTracker.replace(/^~(?=$|\/|\\)/, os.homedir());
       void (async () => {
         try {
-          await fs.mkdir(trackerDir, { recursive: true });
+          await this.fsImpl.mkdir(trackerDir, { recursive: true });
         } catch {
           // ignore
         }
@@ -56,7 +63,7 @@ export class DataManager {
       void (async () => {
         // 1) try saved.json file
         try {
-          const content = await fs.readFile(this.savedFile, 'utf8');
+          const content = await this.fsImpl.readFile(this.savedFile, 'utf8');
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
             this.savedArray = parsed;
@@ -80,7 +87,7 @@ export class DataManager {
         }
         // 3) try legacy added.json file
         try {
-          const content = await fs.readFile(this.addedFile, 'utf8');
+          const content = await this.fsImpl.readFile(this.addedFile, 'utf8');
           const parsed = JSON.parse(content);
           if (Array.isArray(parsed)) {
             this.savedArray = parsed;
@@ -101,6 +108,7 @@ export class DataManager {
 
   public async persistSavedArray(arr: string[]): Promise<void> {
     this.savedArray = [...arr];
+    this.savedSet = new Set(this.savedArray);
     try {
       await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
     } catch {
@@ -128,18 +136,20 @@ export class DataManager {
     }
   }
 
-  private getConfig<T = any>(key: string, fallback?: T): T {
+  /**
+   * Read an individual extension configuration value, providing a default
+   * when the key is absent.  Exposed publicly so that UI components (such as
+   * the tree provider) can avoid duplicating config logic.
+   */
+  public getConfig<T = any>(key: string, fallback?: T): T {
     const cfg = vscode.workspace.getConfiguration('vscode-window-tracker');
     const val = cfg.get<T>(key as any);
     return (val === undefined ? (fallback as T) : val) as T;
   }
 
   public buildDedupKeys(record: WindowRecord): string[] {
-    const uriOrPath = record.uri || record.path || 'unknown';
-    const windowId = record.windowId ?? 'none';
-    const pid = record.pid ?? 'none';
-    const title = (record.title || '').toLowerCase().replace(/\s+/g, ' ').trim();
-    return [`${uriOrPath}::${windowId}`, `${uriOrPath}::${pid}`, `title::${title}`];
+    // wrapper preserved for backwards compatibility
+    return buildDedupKeys(record);
   }
 
   public async loadAllRecords(): Promise<WindowRecord[]> {
@@ -187,12 +197,12 @@ export class DataManager {
     const staleMinutes = this.getConfig<number>('trackerFileStaleMinutes', 30);
     const cutoff = Date.now() - (staleMinutes ?? 30) * 60 * 1000;
     try {
-      const files = await fs.readdir(trackerDir);
+      const files = await this.fsImpl.readdir(trackerDir);
       const jsonFiles = files.filter((file) => file.endsWith('.json'));
       const records = await Promise.all(jsonFiles.map(async (file) => {
         const filePath = path.join(trackerDir, file);
         try {
-          const content = await fs.readFile(filePath, 'utf8');
+          const content = await this.fsImpl.readFile(filePath, 'utf8');
           const raw = JSON.parse(content);
           const candidate = Array.isArray(raw) ? raw : (raw && raw.windows ? raw.windows : [raw]);
           if (Array.isArray(candidate)) {
@@ -237,8 +247,346 @@ export class DataManager {
     }
     return [...map.values()];
   }
+
+  // ---------- saved set helpers ----------
+  public isSaved(stableId: string): boolean {
+    return this.savedSet.has(stableId);
+  }
+
+  public async save(stableId: string): Promise<void> {
+    this.savedSet.add(stableId);
+    await this.persistSavedArray([...this.savedSet]);
+  }
+
+  public async removeSaved(stableId: string): Promise<void> {
+    if (this.savedSet.has(stableId)) {
+      this.savedSet.delete(stableId);
+      await this.persistSavedArray([...this.savedSet]);
+    }
+  }
+
+  public getAllSaved(): string[] {
+    return [...this.savedSet];
+  }
+
+  public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
+    return [...this.savedSet].map((savedId) => this.normalizeSavedCandidate(savedId, trackedById?.get(savedId)?.lastActive));
+  }
+
+  private normalizeSavedCandidate(savedId: string, lastActiveOverride?: number): WindowNode {
+    return normalizeSavedCandidate(savedId, lastActiveOverride);
+  }
+
+  // ---------- tracked helpers ----------
+  public normalizeTrackedNodes(records: WindowRecord[]): WindowNode[] {
+    const now = Date.now();
+    const enriched: WindowNode[] = records.map((record, index) => {
+      const stableId = (buildDedupKeys(record) || [])[0] || `${record.path || record.title || 'window'}-${index}`;
+      let dirUri: vscode.Uri | undefined = undefined;
+      if (record.uri) {
+        try {
+          dirUri = vscode.Uri.parse(record.uri);
+        } catch {
+          dirUri = undefined;
+        }
+      } else if (record.path) {
+        try {
+          dirUri = vscode.Uri.file(record.path);
+        } catch {
+          dirUri = undefined;
+        }
+      }
+      const lastActive = record.lastActive ?? now;
+      return {
+        type: 'window',
+        ...record,
+        stableId,
+        origin: 'tracked',
+        dirUri,
+        relativeActive: toRelativeTime(lastActive, now),
+      } as WindowNode;
+    });
+
+    const sorted = enriched.sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0));
+    return sorted;
+  }
+
+
+  // ---------- combined node list ----------
+  public async getWindowNodes(): Promise<WindowNode[]> {
+    const loaded = await this.loadAllRecords();
+    const trackedNodes = this.normalizeTrackedNodes(loaded);
+    const trackedById = new Map(trackedNodes.map(n => [n.stableId, n]));
+    let addedNodes = this.buildSavedNodes(trackedById);
+    const standaloneAdded: WindowNode[] = [];
+    for (const a of addedNodes) {
+      const t = trackedById.get(a.stableId);
+      if (t) {
+        t.isSaved = true;
+      } else {
+        standaloneAdded.push(a);
+      }
+    }
+    addedNodes = standaloneAdded;
+    const nodes = [...trackedNodes, ...addedNodes].sort((a, b) => {
+      if (a.origin !== b.origin) return a.origin === 'tracked' ? -1 : 1;
+      return (b.lastActive ?? 0) - (a.lastActive ?? 0);
+    });
+    return nodes;
+  }
+
+  // ---------- tracker helpers delegated to internal class ----------
+  public startTracker(): void {
+    if (!this.tracker) {
+      this.tracker = new TrackerService(this.context, { fs: this.fsImpl });
+    }
+    this.tracker.start();
+  }
+
+  public stopTracker(): void {
+    if (this.tracker) {
+      this.tracker.stop();
+      this.tracker = undefined;
+    }
+  }
 }
 
-export function createDataManager(ctx: vscode.ExtensionContext) {
-  return new DataManager(ctx);
+export function createDataManager(ctx: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
+  return new DataManager(ctx, options);
+}
+
+// internal tracker class copied from previous trackerService.ts; used only by DataManager
+class TrackerService {
+    private context: vscode.ExtensionContext;
+    private trackerDir: string;
+    private trackerFilePath: string | undefined;
+    private heartbeatSeconds: number;
+    private staleMinutes: number;
+    private autoCleanup: boolean;
+    private timer: NodeJS.Timeout | undefined;
+    private windowStateListener: vscode.Disposable | undefined;
+    private activeEditorListener: vscode.Disposable | undefined;
+    private boundExitHandler: () => void;
+    private boundSigintHandler: () => void;
+    private boundSigtermHandler: () => void;
+    private boundUncaughtHandler: (error: Error) => void;
+
+    // allow injecting an fs-like implementation for testing
+    private readonly fsImpl: typeof fs = fs;
+
+    constructor(context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
+        this.context = context;
+        this.fsImpl = options?.fs ?? fs;
+        const cfg = vscode.workspace.getConfiguration('vscode-window-tracker');
+        const rawTrackerDir = cfg.get<string>('trackerDir', '~/.vscode-window-tracker')!;
+        this.trackerDir = rawTrackerDir.replace(/^~(?=$|\/|\\)/, os.homedir());
+        this.heartbeatSeconds = cfg.get<number>('heartbeatIntervalSeconds', 5) ?? 5;
+        this.staleMinutes = cfg.get<number>('trackerFileStaleMinutes', 30) ?? 30;
+        this.autoCleanup = cfg.get<boolean>('trackerAutoCleanup', true) ?? true;
+
+        this.trackerFilePath = undefined;
+
+        this.boundExitHandler = () => {
+            if (this.trackerFilePath) {
+            try {
+                // The 'exit' handler must be synchronous.
+                require('fs').unlinkSync(this.trackerFilePath);
+            } catch {
+                // ignore, file might not exist
+            }
+            }
+        };
+        this.boundSigintHandler = () => { process.exit(130); };
+        this.boundSigtermHandler = () => { process.exit(137); };
+        this.boundUncaughtHandler = (error: Error) => {
+            // eslint-disable-next-line no-console
+            console.error('Uncaught exception:', error);
+            process.exit(1);
+        };
+    }
+
+    start(): void {
+        void this.startupCleanup();
+        // initial write
+        void this.writeNow();
+
+        // heartbeat
+        this.timer = setInterval(() => { void this.writeNow(); }, this.heartbeatSeconds * 1000);
+
+        // window/editor listeners
+        this.windowStateListener = vscode.window.onDidChangeWindowState(() => void this.writeNow());
+        this.activeEditorListener = vscode.window.onDidChangeActiveTextEditor(() => void this.writeNow());
+
+        // process signals
+        process.on('exit', this.boundExitHandler);
+        process.on('SIGINT', this.boundSigintHandler);
+        process.on('SIGTERM', this.boundSigtermHandler);
+        process.on('uncaughtException', this.boundUncaughtHandler);
+    }
+
+    stop(): void {
+        if (this.timer) {
+            clearInterval(this.timer);
+            this.timer = undefined;
+        }
+        if (this.windowStateListener) {
+            this.windowStateListener.dispose();
+            this.windowStateListener = undefined;
+        }
+        if (this.activeEditorListener) {
+            this.activeEditorListener.dispose();
+            this.activeEditorListener = undefined;
+        }
+        try { process.off('exit', this.boundExitHandler); } catch { }
+        try { process.off('SIGINT', this.boundSigintHandler); } catch { }
+        try { process.off('SIGTERM', this.boundSigtermHandler); } catch { }
+        try { process.off('uncaughtException', this.boundUncaughtHandler); } catch { }
+
+        void this.removeNow();
+    }
+
+    async ensureDir(): Promise<void> {
+        try {
+            await this.fsImpl.mkdir(this.trackerDir, { recursive: true });
+        } catch {
+            // ignore
+        }
+    }
+
+    async writeNow(): Promise<void> {
+        await this.ensureDir();
+        // If we have a stored tracker file path, validate ownership before reusing it.
+        if (this.trackerFilePath) {
+            try {
+                const existing = await this.fsImpl.readFile(this.trackerFilePath, 'utf8');
+                try {
+                    const parsed = JSON.parse(existing);
+                    // If the file is owned by another process, don't reuse it.
+                    if (parsed && typeof parsed.pid === 'number' && parsed.pid !== process.pid) {
+                        this.trackerFilePath = undefined;
+                    }
+                } catch {
+                    // If parse fails, don't trust the file — create a new one.
+                    this.trackerFilePath = undefined;
+                }
+            } catch {
+                // Can't read the file (missing/unreadable) — create a new one.
+                this.trackerFilePath = undefined;
+            }
+        }
+
+        if (!this.trackerFilePath) {
+            const fname = `vscode-${process.pid}-${Date.now()}.json`;
+            this.trackerFilePath = path.join(this.trackerDir, fname);
+        }
+
+        const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+        const folderPath = workspaceFolder?.uri.fsPath;
+        const status = vscode.window.state.focused ? 'focused' : 'visible';
+
+        // Determine lastActive such that it represents the last time the
+        // window was focused. Do not update lastActive on periodic heartbeats
+        // when the window is not focused — preserve the existing value if any.
+        let lastActiveValue = Date.now();
+        if (status !== 'focused') {
+            // Try to read existing tracker file to reuse prior lastActive
+            try {
+                const existingPath = this.trackerFilePath ?? (await this.context.globalState.get('vscode-window-tracker.trackerFile')) as string | undefined;
+                if (existingPath) {
+                    const existing = await this.fsImpl.readFile(existingPath, 'utf8').catch(() => undefined);
+                    if (existing) {
+                        try {
+                            const parsed = JSON.parse(existing);
+                            if (parsed && typeof parsed.lastActive === 'number') {
+                                lastActiveValue = parsed.lastActive;
+                            }
+                        } catch {
+                            // ignore parse errors and keep now as fallback
+                        }
+                    }
+                }
+            } catch {
+                // ignore read errors
+            }
+        }
+
+        const rec = {
+            title: vscode.window.activeTextEditor?.document.fileName ? path.basename(vscode.window.activeTextEditor.document.fileName) : 'Current Workspace',
+            path: folderPath,
+            uri: workspaceFolder?.uri.toString(),
+            pid: process.pid,
+            lastActive: lastActiveValue,
+            source: 'vscode-extension',
+            status,
+        };
+
+        try {
+            const tmp = `${this.trackerFilePath}.tmp`;
+            await this.fsImpl.writeFile(tmp, JSON.stringify(rec, null, 2), 'utf8');
+            await this.fsImpl.rename(tmp, this.trackerFilePath);
+            // persist the chosen tracker file path to globalState so it can be
+            // cleaned up or reused by subsequent runs/tests
+            try {
+                await this.context.globalState.update('vscode-window-tracker.trackerFile', this.trackerFilePath);
+            } catch {
+                // ignore failures to update global state in environments where it's not available
+            }
+        } catch (e) {
+            // Keep parity with previous behavior: log but don't throw
+            // eslint-disable-next-line no-console
+            console.error('Failed to write tracker file', e);
+        }
+    }
+
+    async removeNow(): Promise<void> {
+        if (!this.trackerFilePath) {
+            // Try to recover the stored tracker path from globalState (useful
+            // in tests or across runs where the service wasn't the one that
+            // created the file in this process).
+            try {
+                const stored = await this.context.globalState.get('vscode-window-tracker.trackerFile');
+                if (typeof stored === 'string') {
+                    this.trackerFilePath = stored;
+                }
+            } catch {
+                // ignore
+            }
+        }
+        if (!this.trackerFilePath) return;
+        try {
+            await this.fsImpl.unlink(this.trackerFilePath);
+        } catch {
+            // ignore
+        }
+        this.trackerFilePath = undefined;
+        try {
+            await this.context.globalState.update('vscode-window-tracker.trackerFile', undefined);
+        } catch {
+            // ignore
+        }
+    }
+
+    private async startupCleanup(): Promise<void> {
+        if (!this.autoCleanup) return;
+        try {
+            const cutoff = Date.now() - this.staleMinutes * 60 * 1000;
+            const files = await this.fsImpl.readdir(this.trackerDir).catch(() => []);
+            for (const f of files) {
+                if (!f.endsWith('.json')) continue;
+                const fp = path.join(this.trackerDir, f);
+                try {
+                    const c = await this.fsImpl.readFile(fp, 'utf8');
+                    const parsed = JSON.parse(c);
+                    const last = parsed && typeof parsed.lastActive === 'number' ? parsed.lastActive : undefined;
+                    if (last && last < cutoff) {
+                        await this.fsImpl.unlink(fp).catch(() => {});
+                    }
+                } catch {
+                    // ignore parse/read errors
+                }
+            }
+        } catch {
+            // ignore
+        }
+    }
 }
