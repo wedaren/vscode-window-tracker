@@ -5,15 +5,16 @@ import { WindowRecord } from './dataManager';
 import { WindowNode } from './types';
 
 /**
- * Generate a set of deduplication keys for a record.  Two records that share
- * any one of these keys are considered potentially referring to the same
- * logical workspace window.
+ * 生成一组去重键。两个记录只要共享其中之一就视为可能是同一窗口。
  *
- * The keys are ordered by preference and are used by the internal `dedupe`
- * algorithm in `DataManager`.
+ * 键按优先级排序（uri+windowId、uri+pid、标题），由 `DataManager`
+ * 的 `dedupe` 算法使用。
  *
- * @param record - raw record obtained from tracker/daemon
- * @returns array of string keys (may contain duplicates)
+ * 原理：优先使用 URI/路径，因为它们最稳定；其次 pid/windowId；最后标题
+ * 用于补充无法从 URI 获取的情况。
+ *
+ * @param record - 来自 tracker/daemon 的原始记录
+ * @returns 字符串键数组（可能重复）
  */
 export function buildDedupKeys(record: WindowRecord): string[] {
   const uriOrPath = record.uri || record.path || 'unknown';
@@ -24,13 +25,14 @@ export function buildDedupKeys(record: WindowRecord): string[] {
 }
 
 /**
- * Turn a UNIX timestamp into a human‑readable relative time string.  The
- * returned value describes how long ago the timestamp was, using the same
- * conventions as the tree view ("now", "5m", "12h", "3d").
+ * 将 UNIX 时间戳格式化为树视图使用的相对时间字符串（"now"、"5m"、
+ * "12h"、"3d" 等）。
  *
- * @param timestamp - milliseconds since epoch to compare against
- * @param now - reference time; defaults to Date.now() which makes the
- *   function easier to test
+ * 原理：先计算当前时间与目标时间的差值，然后按分钟/小时/天级别
+ * 分段返回。
+ *
+ * @param timestamp - 待比较的毫秒级时间戳
+ * @param now - 参考时间，默认使用 Date.now() 以便测试可控
  */
 export function toRelativeTime(timestamp: number, now = Date.now()): string {
   const diffMs = now - timestamp;
@@ -44,14 +46,20 @@ export function toRelativeTime(timestamp: number, now = Date.now()): string {
 }
 
 /**
- * Convert a saved‑id string (which may be a URI, a filesystem path, or an
- * opaque identifier) into a `WindowNode` suitable for display.  This helper is
- * primarily used by the old `SavedService` logic that now lives in
- * `DataManager`.
+ * 将保存的 id 字符串转换为可显示的 `WindowNode`。
  *
- * @param savedId - stable identifier of the saved window
- * @param lastActiveOverride - optional timestamp that should override the
- *   node's computed `lastActive` value
+ * 输入可能是 URI、文件路径或者任意字符串。函数会尝试解析成
+ * vscode.Uri，如果失败则视为普通文本并填充 title。
+ *
+ * 原理：
+ * 1. 去除类似 "uri::pid" 的后缀，只保留 uri 部分；
+ * 2. 展开 ~; 3. 使用 `vscode.Uri.parse` 或 `Uri.file` 创建 Uri；
+ * 4. 构建包含 stableId、path、uri、lastActive 等字段的节点对象。
+ *
+ * 此方法用于 `SavedService` / `DataManager` 的节点生成逻辑。
+ *
+ * @param savedId - 保存的稳定标识符
+ * @param lastActiveOverride - 可选的 lastActive 时间覆盖
  */
 export function normalizeSavedCandidate(savedId: string, lastActiveOverride?: number): WindowNode {
   let candidate = savedId;
