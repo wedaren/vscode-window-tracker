@@ -27,6 +27,9 @@ export class TrackerService {
     private boundSigtermHandler: () => void;
     private boundUncaughtHandler: (error: Error) => void;
 
+    // used to coalesce rapid events so we don't spawn many concurrent writes
+    private pendingWrite: NodeJS.Timeout | undefined;
+
     // allow injecting an fs-like implementation for testing
     private readonly fsImpl: typeof fs = fs;
 
@@ -70,12 +73,19 @@ export class TrackerService {
         // 设置心跳定时器，定期更新文件内容。
         this.timer = setInterval(() => { void this.writeNow(); }, this.heartbeatSeconds * 1000);
 
-        // 监听 VS Code 窗口状态和活动编辑器变化，以便任何改变都触发写入。
-        this.windowStateListener = vscode.window.onDidChangeWindowState(() => void this.writeNow());
-        this.activeEditorListener = vscode.window.onDidChangeActiveTextEditor(() => void this.writeNow());
+        // 监听 VS Code 窗口状态和活动编辑器变化，事件可能非常频繁；
+        // 使用 scheduleWrite() 来节流，避免在短时间内多次 I/O。
+        this.windowStateListener = vscode.window.onDidChangeWindowState(() => this.scheduleWrite());
+        this.activeEditorListener = vscode.window.onDidChangeActiveTextEditor(() => this.scheduleWrite());
 
         // 注册进程信号处理，确保在退出或异常时删除 tracker 文件。
         process.on('exit', this.boundExitHandler);
+        
+        // 清除任何挂起的写入计划（理论上不会有）。
+        if (this.pendingWrite) {
+            clearTimeout(this.pendingWrite);
+            this.pendingWrite = undefined;
+        }
         process.on('SIGINT', this.boundSigintHandler);
         process.on('SIGTERM', this.boundSigtermHandler);
         process.on('uncaughtException', this.boundUncaughtHandler);
@@ -100,6 +110,12 @@ export class TrackerService {
         try { process.off('SIGTERM', this.boundSigtermHandler); } catch { }
         try { process.off('uncaughtException', this.boundUncaughtHandler); } catch { }
 
+        // 取消任何排队的写操作
+        if (this.pendingWrite) {
+            clearTimeout(this.pendingWrite);
+            this.pendingWrite = undefined;
+        }
+
         // 停用时尝试删除当前会话文件。
         void this.removeNow();
     }
@@ -114,6 +130,11 @@ export class TrackerService {
     }
 
     async writeNow(): Promise<void> {
+        // 取消可能存在的排队，因为我们马上要写了。
+        if (this.pendingWrite) {
+            clearTimeout(this.pendingWrite);
+            this.pendingWrite = undefined;
+        }
         // 每次写入前确保目录存在。
         await this.ensureDir();
         // 如果之前已有文件路径，检查是否仍然属于当前进程。
@@ -219,6 +240,22 @@ export class TrackerService {
         } catch {
             // ignore
         }
+    }
+
+
+    /**
+     * 辅助函数：在短时间内多次调用时只执行一次 `writeNow`。
+     * 防止焦点切换/编辑器变更等事件导致频繁 I/O。
+     */
+    private scheduleWrite(): void {
+        if (this.pendingWrite) {
+            clearTimeout(this.pendingWrite);
+        }
+        // 延迟写入 100ms，期间若有更多调用会重置定时器。
+        this.pendingWrite = setTimeout(() => {
+            this.pendingWrite = undefined;
+            void this.writeNow();
+        }, 100);
     }
 
     private async startupCleanup(): Promise<void> {

@@ -90,4 +90,29 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
     assert.strictEqual(updatedKey, 'vscode-window-tracker.trackerFile');
     assert.strictEqual(updatedValue, undefined);
   });
+
+  test('场景4：调度写入会合并频繁调用', async () => {
+    const fakeFs: any = {
+      mkdir: async () => {},
+      writeFile: async () => {},
+      rename: async () => {},
+      readFile: async () => '{}',
+      unlink: async () => {},
+      readdir: async () => [],
+    };
+    const ctx = { globalState: { get: (_: any) => undefined, update: async () => {} } } as any;
+    const svc = new TrackerService(ctx, { fs: fakeFs });
+
+    let count = 0;
+    (svc as any).writeNow = async () => { count += 1; };
+
+    // 连续调用多次 scheduleWrite
+    svc.scheduleWrite();
+    svc.scheduleWrite();
+    svc.scheduleWrite();
+
+    // 等待 150ms 让定时器触发
+    await new Promise((r) => setTimeout(r, 150));
+    assert.strictEqual(count, 1, '多次调用应合并为一次写入');
+  });
 });
