@@ -76,10 +76,16 @@ export class DataManager {
   }
 
   // Primary API now uses 'saved' naming and persists to saved.json
+  // 返回当前保存列表的拷贝
   public getSavedArray(): string[] {
     return [...this.savedArray];
   }
 
+  /**
+   * 持久化保存列表：更新内存结构并写入两个存储位置
+   *  - globalState 用于扩展自身快速加载
+   *  - saved.json 允许用户手工编辑
+   */
   public async persistSavedArray(arr: string[]): Promise<void> {
     this.savedArray = [...arr];
     this.savedSet = new Set(this.savedArray);
@@ -92,6 +98,7 @@ export class DataManager {
   }
 
 
+  // 原子化写 JSON 到磁盘（先写临时文件再重命名）
   private async writeJson(filePath: string, data: unknown): Promise<void> {
     try {
       const tmp = `${filePath}.tmp`;
@@ -102,14 +109,13 @@ export class DataManager {
     }
   }
 
-  /** Expand leading ~ to user home directory */
+  /** 将 ~ 开头路径展开为用户主目录 */
   private expandHome(raw: string): string {
     return raw.replace(/^~(?=$|\/|\\)/, os.homedir());
   }
 
   /**
-   * Safely read JSON from a file.  Returns undefined if the file does not
-   * exist or cannot be parsed.
+   * 从磁盘读取并解析 JSON，失败时返回 undefined（不会抛出）。
    */
   private async readJson(filePath: string): Promise<any | undefined> {
     try {
@@ -121,7 +127,7 @@ export class DataManager {
   }
 
   /**
-   * Read configuration key and expand '~' to home; used for various paths.
+   * 获取配置项并展开 '~'。主要用于目录或文件路径。
    */
   private resolveConfigPath(key: string, fallback: string): string {
     const raw = this.getConfig<string>(key, fallback);
@@ -130,9 +136,7 @@ export class DataManager {
 
 
   /**
-   * Read an individual extension configuration value, providing a default
-   * when the key is absent.  Exposed publicly so that UI components (such as
-   * the tree provider) can avoid duplicating config logic.
+   * 获取扩展配置项，若未设置则返回默认值。公开给 UI 模块使用。
    */
   public getConfig<T = any>(key: string, fallback?: T): T {
     const cfg = vscode.workspace.getConfiguration('vscode-window-tracker');
@@ -145,6 +149,7 @@ export class DataManager {
     return buildDedupKeys(record);
   }
 
+  // 从所有来源加载记录并去重
   public async loadAllRecords(): Promise<WindowRecord[]> {
     const preferDaemon = this.getConfig<boolean>('preferDaemon', false);
     const fromDaemon = preferDaemon ? await this.loadDaemonFile() : [];
@@ -156,6 +161,7 @@ export class DataManager {
     return this.dedupe([fromWorkspace, ...fromTracker]);
   }
 
+  // 如果启用了 daemon，读取其文件内容
   private async loadDaemonFile(): Promise<WindowRecord[]> {
     const expanded = this.resolveConfigPath('daemonFile', '~/.vscode-window-daemon.json');
     const parsed = await this.readJson(expanded);
@@ -166,6 +172,7 @@ export class DataManager {
     return [];
   }
 
+  // 构造当前工作区的临时记录，用于列表顶部显示
   private loadCurrentWorkspaceRecord(): WindowRecord {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     const folderPath = workspaceFolder?.uri.fsPath;
@@ -179,6 +186,7 @@ export class DataManager {
     };
   }
 
+  // 从 tracker 目录读取所有 JSON 文件，忽略过期项
   private async loadTrackerFiles(): Promise<WindowRecord[]> {
     const trackerDir = this.resolveConfigPath('trackerDir', '~/.vscode-window-tracker');
     const staleMinutes = this.getConfig<number>('trackerFileStaleMinutes', 30);
@@ -213,6 +221,7 @@ export class DataManager {
     }
   }
 
+  // 根据去重键保留最新记录
   private dedupe(records: WindowRecord[]): WindowRecord[] {
     const map = new Map<string, WindowRecord>();
     for (const record of records) {
@@ -231,6 +240,7 @@ export class DataManager {
   }
 
   // ---------- saved set helpers ----------
+  // 以下方法操作 "已保存" 集合
   public isSaved(stableId: string): boolean {
     return this.savedSet.has(stableId);
   }
@@ -260,6 +270,7 @@ export class DataManager {
   }
 
   // ---------- tracked helpers ----------
+  // 将 WindowRecord 转换为 Tree 节点
   public normalizeTrackedNodes(records: WindowRecord[]): WindowNode[] {
     const now = Date.now();
     const enriched: WindowNode[] = records.map((record, index) => {
@@ -295,6 +306,7 @@ export class DataManager {
 
 
   // ---------- combined node list ----------
+  // 合并已保存和跟踪节点，确保排序和标记
   public async getWindowNodes(): Promise<WindowNode[]> {
     const loaded = await this.loadAllRecords();
     const trackedNodes = this.normalizeTrackedNodes(loaded);
