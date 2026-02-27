@@ -17,7 +17,6 @@ export type WindowRecord = {
 };
 
 export class DataManager {
-  private addedFile = '';
   private savedFile = '';
   private trackedFile = '';
   private savedArray: string[] = [];
@@ -34,7 +33,6 @@ export class DataManager {
     }
 
     // Paths for backward-compatible storage and new 'saved' file
-    this.addedFile = path.join(this.context.globalStoragePath || os.homedir(), 'added.json');
     this.trackedFile = path.join(this.context.globalStoragePath || os.homedir(), 'tracked.json');
 
     // Prefer editable saved.json inside tracker directory to allow user edits
@@ -49,12 +47,10 @@ export class DataManager {
     })();
     this.savedFile = path.join(trackerDir, 'saved.json');
 
-    // load or migrate saved list
+    // load saved list from global state
     const storedSaved = this.context.globalState.get<string[]>('vscode-window-tracker.saved', []);
     if (storedSaved && storedSaved.length) {
       this.savedArray = storedSaved;
-    } else {
-      void this.migrateSaved();
     }
   }
 
@@ -74,14 +70,6 @@ export class DataManager {
     void this.writeJson(this.savedFile, this.savedArray);
   }
 
-  // Backwards-compatible wrappers for older API names
-  public getAddedArray(): string[] {
-    return this.getSavedArray();
-  }
-
-  public async persistAddedArray(arr: string[]): Promise<void> {
-    return this.persistSavedArray(arr);
-  }
 
   private async writeJson(filePath: string, data: unknown): Promise<void> {
     try {
@@ -111,37 +99,6 @@ export class DataManager {
     }
   }
 
-  /**
-   * Performs legacy migration logic originally in constructor.
-   */
-  private async migrateSaved(): Promise<void> {
-    // 1) try saved.json file
-    const arr = await this.readJson(this.savedFile);
-    if (Array.isArray(arr)) {
-      this.savedArray = arr;
-      await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-      return;
-    }
-    // 2) legacy globalState
-    try {
-      const legacy = this.context.globalState.get<string[]>('vscode-window-tracker.added', []);
-      if (legacy && legacy.length) {
-        this.savedArray = legacy;
-        await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-        void this.writeJson(this.savedFile, this.savedArray);
-        return;
-      }
-    } catch {
-      // ignore
-    }
-    // 3) legacy added.json
-    const arr2 = await this.readJson(this.addedFile);
-    if (Array.isArray(arr2)) {
-      this.savedArray = arr2;
-      await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-      void this.writeJson(this.savedFile, this.savedArray);
-    }
-  }
 
   /**
    * Read an individual extension configuration value, providing a default
