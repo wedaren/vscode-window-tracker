@@ -62,18 +62,19 @@ export class TrackerService {
     }
 
     start(): void {
+        // 服务启动时先执行一次清理，移除目录中陈旧的 tracker 文件。
         void this.startupCleanup();
-        // initial write
+        // 初次立即写入当前会话状态。
         void this.writeNow();
 
-        // heartbeat
+        // 设置心跳定时器，定期更新文件内容。
         this.timer = setInterval(() => { void this.writeNow(); }, this.heartbeatSeconds * 1000);
 
-        // window/editor listeners
+        // 监听 VS Code 窗口状态和活动编辑器变化，以便任何改变都触发写入。
         this.windowStateListener = vscode.window.onDidChangeWindowState(() => void this.writeNow());
         this.activeEditorListener = vscode.window.onDidChangeActiveTextEditor(() => void this.writeNow());
 
-        // process signals
+        // 注册进程信号处理，确保在退出或异常时删除 tracker 文件。
         process.on('exit', this.boundExitHandler);
         process.on('SIGINT', this.boundSigintHandler);
         process.on('SIGTERM', this.boundSigtermHandler);
@@ -81,6 +82,7 @@ export class TrackerService {
     }
 
     stop(): void {
+        // 清理所有运行时资源：定时器、事件监听器和信号处理。
         if (this.timer) {
             clearInterval(this.timer);
             this.timer = undefined;
@@ -98,10 +100,12 @@ export class TrackerService {
         try { process.off('SIGTERM', this.boundSigtermHandler); } catch { }
         try { process.off('uncaughtException', this.boundUncaughtHandler); } catch { }
 
+        // 停用时尝试删除当前会话文件。
         void this.removeNow();
     }
 
     async ensureDir(): Promise<void> {
+        // 确保 tracker 目录存在；失败时静默忽略。
         try {
             await this.fsImpl.mkdir(this.trackerDir, { recursive: true });
         } catch {
@@ -110,23 +114,24 @@ export class TrackerService {
     }
 
     async writeNow(): Promise<void> {
+        // 每次写入前确保目录存在。
         await this.ensureDir();
-        // If we have a stored tracker file path, validate ownership before reusing it.
+        // 如果之前已有文件路径，检查是否仍然属于当前进程。
         if (this.trackerFilePath) {
             try {
                 const existing = await this.fsImpl.readFile(this.trackerFilePath, 'utf8');
                 try {
                     const parsed = JSON.parse(existing);
-                    // If the file is owned by another process, don't reuse it.
+                    // 如果文件归属于其他进程，则放弃复用路径。
                     if (parsed && typeof parsed.pid === 'number' && parsed.pid !== process.pid) {
                         this.trackerFilePath = undefined;
                     }
                 } catch {
-                    // If parse fails, don't trust the file — create a new one.
+                    // 解析失败时不信任旧文件。
                     this.trackerFilePath = undefined;
                 }
             } catch {
-                // Can't read the file (missing/unreadable) — create a new one.
+                // 无法读取文件时创建新路径。
                 this.trackerFilePath = undefined;
             }
         }
@@ -140,12 +145,9 @@ export class TrackerService {
         const folderPath = workspaceFolder?.uri.fsPath;
         const status = vscode.window.state.focused ? 'focused' : 'visible';
 
-        // Determine lastActive such that it represents the last time the
-        // window was focused. Do not update lastActive on periodic heartbeats
-        // when the window is not focused — preserve the existing value if any.
+        // 计算 lastActive，如果当前窗口不聚焦则重用已有值。
         let lastActiveValue = Date.now();
         if (status !== 'focused') {
-            // Try to read existing tracker file to reuse prior lastActive
             try {
                 const existingPath = this.trackerFilePath ?? (await this.context.globalState.get('vscode-window-tracker.trackerFile')) as string | undefined;
                 if (existingPath) {
@@ -180,25 +182,22 @@ export class TrackerService {
             const tmp = `${this.trackerFilePath}.tmp`;
             await this.fsImpl.writeFile(tmp, JSON.stringify(rec, null, 2), 'utf8');
             await this.fsImpl.rename(tmp, this.trackerFilePath);
-            // persist the chosen tracker file path to globalState so it can be
-            // cleaned up or reused by subsequent runs/tests
+            // 将文件路径写入 globalState 以便跨会话清理。
             try {
                 await this.context.globalState.update('vscode-window-tracker.trackerFile', this.trackerFilePath);
             } catch {
                 // ignore failures to update global state in environments where it's not available
             }
         } catch (e) {
-            // Keep parity with previous behavior: log but don't throw
+            // 与旧行为保持一致：记录错误但不抛出。
             // eslint-disable-next-line no-console
             console.error('Failed to write tracker file', e);
         }
     }
 
     async removeNow(): Promise<void> {
+        // 删除当前 tracker 文件，如果内存中没有路径则尝试从 globalState 恢复。
         if (!this.trackerFilePath) {
-            // Try to recover the stored tracker path from globalState (useful
-            // in tests or across runs where the service wasn't the one that
-            // created the file in this process).
             try {
                 const stored = await this.context.globalState.get('vscode-window-tracker.trackerFile');
                 if (typeof stored === 'string') {
@@ -223,6 +222,7 @@ export class TrackerService {
     }
 
     private async startupCleanup(): Promise<void> {
+        // 清理 trackerDir 中过期的 json 文件。
         if (!this.autoCleanup) return;
         try {
             const cutoff = Date.now() - this.staleMinutes * 60 * 1000;
