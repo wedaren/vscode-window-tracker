@@ -1,17 +1,17 @@
 import * as vscode from 'vscode';
 import { createDataManager } from './dataManager';
 import { WindowNode } from './types';
-import * as view from './viewHelpers';
+import { formatTitle, buildDescription, buildTooltip, buildContextValue, getNodeIcon, isCurrentWorkspace } from './dataManager';
 
 
 
 export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNode> {
- 	private readonly _onDidChangeTreeData = new vscode.EventEmitter<WindowNode | undefined>();
- 	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
+	private readonly _onDidChangeTreeData = new vscode.EventEmitter<WindowNode | undefined>();
+	readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
 	private nodes: WindowNode[] = [];
- 	private dataManager: ReturnType<typeof createDataManager>;
- 	private lastHash = '';
+	private dataManager: ReturnType<typeof createDataManager>;
+	private lastHash = '';
 
 	constructor(private readonly context: vscode.ExtensionContext) {
 		this.dataManager = createDataManager(this.context);
@@ -21,8 +21,8 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
 
 
- 	public startHeartbeat(context: vscode.ExtensionContext): void {
- 		void this.refresh();
+	public startHeartbeat(context: vscode.ExtensionContext): void {
+		void this.refresh();
 		const interval = this.dataManager.getConfig<number>('heartbeatIntervalSeconds', 5) * 1000;
 		const timer = setInterval(() => {
 			void this.refresh();
@@ -30,7 +30,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 		context.subscriptions.push({ dispose: () => clearInterval(timer) });
 	}
 
-public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<void> {
+	public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<void> {
 		let targetUri = dirUri;
 		if (!targetUri && node && node.dirUri) {
 			targetUri = node.dirUri;
@@ -62,13 +62,13 @@ public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<v
 	}
 
 	public getTreeItem(element: WindowNode): vscode.TreeItem {
-		const title = view.formatTitle(element);
+		const title = formatTitle(element);
 		const item = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
 		item.id = `${element.origin}:${element.stableId}`;
-		item.iconPath = view.getNodeIcon(element, view.isCurrentWorkspace(element.path, element.uri), this.dataManager);
-		item.description = view.buildDescription(element);
-		item.tooltip = view.buildTooltip(element);
-		item.contextValue = view.buildContextValue(element);
+		item.iconPath = getNodeIcon(element, isCurrentWorkspace(element.path, element.uri), this.dataManager);
+		item.description = buildDescription(element);
+		item.tooltip = buildTooltip(element);
+		item.contextValue = buildContextValue(element);
 		try {
 			if (element.origin === 'saved') {
 				console.debug(`[vscode-window-tracker] contextValue for ${item.id}: ${item.contextValue}`);
@@ -76,8 +76,8 @@ public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<v
 		} catch {
 			// ignore logging errors
 		}
-		const isCurrentWorkspace = view.isCurrentWorkspace(element.path, element.uri);
-		if (isCurrentWorkspace) {
+		const current = isCurrentWorkspace(element.path, element.uri);
+		if (current) {
 			item.label = { label: title, highlights: [[0, title.length]] };
 		}
 		item.accessibilityInformation = {
@@ -118,13 +118,13 @@ public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<v
 
 
 
-// helper methods have been moved to viewHelpers.ts
+	// helper methods have been moved to viewHelpers.ts
 
 	// icon logic moved to viewHelpers
 
-// moved to viewHelpers by proxy export
+	// moved to viewHelpers by proxy export
 
-// dereferenced to viewHelpers
+	// dereferenced to viewHelpers
 
 	// workspace-matching logic lives in viewHelpers
 }
