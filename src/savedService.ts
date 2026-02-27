@@ -32,7 +32,10 @@ export class SavedService {
   private savedSet: Set<string> = new Set();
   private readonly fsImpl: typeof fs;
 
-  constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs; trackerDir?: string }) {
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    options?: { fs?: typeof fs; trackerDir?: string }
+  ) {
     this.fsImpl = options?.fs ?? fs;
     const trackerDir = options?.trackerDir ?? os.homedir();
     this.savedFile = path.join(trackerDir, 'saved.json');
@@ -61,8 +64,7 @@ export class SavedService {
     this.savedSet = new Set(this.savedArray);
     try {
       await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
-    } catch {
-    }
+    } catch {}
     void this.writeJson(this.savedFile, this.savedArray);
   }
 
@@ -118,7 +120,7 @@ export class SavedService {
    * 将保存 id 列表转换为供树视图使用的 `WindowNode` 数组。
    */
   public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
-    return [...this.savedSet].map((savedId) =>
+    return [...this.savedSet].map(savedId =>
       normalizeSavedCandidate(savedId, trackedById?.get(savedId)?.lastActive)
     );
   }

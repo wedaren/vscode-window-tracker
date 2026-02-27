@@ -1,0 +1,10 @@
+node_modules
+dist
+build
+.vscode
+.vscode-test
+.vscode-test/**
+.cache
+coverage
+out
+.DS_Store

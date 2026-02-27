@@ -6,17 +6,14 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
   const origGetConfig = vscode.workspace.getConfiguration;
 
   setup(() => {
-    
     (vscode.workspace as any).getConfiguration = (_: any) => ({ get: (_k: any, d: any) => d });
   });
 
   teardown(() => {
-    
     (vscode.workspace as any).getConfiguration = origGetConfig;
   });
 
   test('场景1：writeNow 写入文件并记录路径', async () => {
-    
     let wroteTmp: { path?: string; data?: string } = {};
     let renamed: { src?: string; dest?: string } = {};
     let updatedKey: string | undefined;
@@ -24,8 +21,14 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
 
     const fakeFs: any = {
       mkdir: async () => {},
-      writeFile: async (p: string, data: string) => { wroteTmp.path = p; wroteTmp.data = data; },
-      rename: async (s: string, d: string) => { renamed.src = s; renamed.dest = d; },
+      writeFile: async (p: string, data: string) => {
+        wroteTmp.path = p;
+        wroteTmp.data = data;
+      },
+      rename: async (s: string, d: string) => {
+        renamed.src = s;
+        renamed.dest = d;
+      },
       readFile: async () => '',
       unlink: async () => {},
       readdir: async () => [],
@@ -33,7 +36,10 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
 
     const fakeGlobalState = {
       get: (_k: string) => undefined,
-      update: async (k: string, v: any) => { updatedKey = k; updatedValue = v; },
+      update: async (k: string, v: any) => {
+        updatedKey = k;
+        updatedValue = v;
+      },
     } as any;
     const ctx = { globalState: fakeGlobalState } as vscode.ExtensionContext;
     const svc = new TrackerService(ctx, { fs: fakeFs });
@@ -54,20 +60,25 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
     const fakeFs2: any = {
       readdir: async () => files,
       readFile: async (p: string, _enc: string) => {
-        if (p.endsWith('old.json')) return JSON.stringify({ lastActive: Date.now() - 1000 * 60 * 60 });
+        if (p.endsWith('old.json'))
+          return JSON.stringify({ lastActive: Date.now() - 1000 * 60 * 60 });
         return JSON.stringify({ lastActive: Date.now() });
       },
-      unlink: async (p: string) => { deleted.push(p); },
+      unlink: async (p: string) => {
+        deleted.push(p);
+      },
     };
 
     const fakeGlobalState = { get: (_k: string) => undefined, update: async () => {} } as any;
     const ctx = { globalState: fakeGlobalState } as vscode.ExtensionContext;
     const svc = new TrackerService(ctx, { fs: fakeFs2 });
 
-    
     await (svc as any).startupCleanup();
 
-    assert.ok(deleted.some(d => d.endsWith('old.json')), '旧文件应被删除');
+    assert.ok(
+      deleted.some(d => d.endsWith('old.json')),
+      '旧文件应被删除'
+    );
     assert.ok(!deleted.some(d => d.endsWith('new.json')), '新文件不应被删除');
   });
 
@@ -76,10 +87,17 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
     let updatedKey: string | undefined;
     let updatedValue: any;
 
-    const fakeFs3: any = { unlink: async (p: string) => { unlinkedPath = p; } };
+    const fakeFs3: any = {
+      unlink: async (p: string) => {
+        unlinkedPath = p;
+      },
+    };
     const fakeGlobalState = {
       get: (_k: string) => '/tmp/fake-tracker-123.json',
-      update: async (k: string, v: any) => { updatedKey = k; updatedValue = v; },
+      update: async (k: string, v: any) => {
+        updatedKey = k;
+        updatedValue = v;
+      },
     } as any;
     const ctx = { globalState: fakeGlobalState } as vscode.ExtensionContext;
     const svc = new TrackerService(ctx, { fs: fakeFs3 });
@@ -104,15 +122,15 @@ suite('TrackerService 单独模块测试 (中文注释)', () => {
     const svc = new TrackerService(ctx, { fs: fakeFs });
 
     let count = 0;
-    (svc as any).writeNow = async () => { count += 1; };
+    (svc as any).writeNow = async () => {
+      count += 1;
+    };
 
-    
     svc.scheduleWrite();
     svc.scheduleWrite();
     svc.scheduleWrite();
 
-    
-    await new Promise((r) => setTimeout(r, 150));
+    await new Promise(r => setTimeout(r, 150));
     assert.strictEqual(count, 1, '多次调用应合并为一次写入');
   });
 });

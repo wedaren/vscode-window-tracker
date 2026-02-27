@@ -165,7 +165,7 @@ export class ConfigService {
     const watch = opts?.watch ?? true;
     if (watch) {
       // 订阅 workspace 配置变更，若影响本扩展配置节则重新加载并发出事件
-      this.disposable = vscode.workspace.onDidChangeConfiguration((e) => {
+      this.disposable = vscode.workspace.onDidChangeConfiguration(e => {
         if (e.affectsConfiguration(this.section)) {
           this.load();
           this._onDidChange.fire();

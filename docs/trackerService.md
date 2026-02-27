@@ -3,7 +3,7 @@
 
 > **当前实现**：`TrackerService` 现在再次作为独立模块存在于 `src/trackerService.ts`，
 > 以便于单元测试和代码组织。
-> 
+>
 > 历史记录：该类在早期版本中曾经单独存在，随后在 2026 年的重构中
 > 暂时合并到 `DataManager` 中；本次重构将其拆分回单独文件，并且
 > 仍然保留通过 `DataManager` 访问的便利方法。
@@ -68,5 +68,4 @@ export function activate(context: vscode.ExtensionContext) {
 ## 维护者提示
 
 - `trackerService` 的行为与用户配置紧密相关，请在修改默认配置键时在 `package.json` 中同步更新 `contributes.configuration`。
-
 ````

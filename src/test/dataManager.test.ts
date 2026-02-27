@@ -19,10 +19,15 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
   test('保存集基本操作和持久化回写', async () => {
     const fakeGlobalState: any = {
       get: (_k: string) => [],
-      update: async (_k: string, v: any) => { lastUpdate = v; },
+      update: async (_k: string, v: any) => {
+        lastUpdate = v;
+      },
     };
     let lastUpdate: any;
-    const ctx = { globalState: fakeGlobalState, globalStoragePath: os.tmpdir() } as any as vscode.ExtensionContext;
+    const ctx = {
+      globalState: fakeGlobalState,
+      globalStoragePath: os.tmpdir(),
+    } as any as vscode.ExtensionContext;
     const dm = new DataManager(ctx, { fs: {} as any });
 
     assert.deepStrictEqual(dm.getSavedArray(), []);
@@ -60,8 +65,14 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
 
     const fakeFs: any = {
       mkdir: async () => {},
-      writeFile: async (p: string, data: string) => { wroteTmp.path = p; wroteTmp.data = data; },
-      rename: async (s: string, d: string) => { renamed.src = s; renamed.dest = d; },
+      writeFile: async (p: string, data: string) => {
+        wroteTmp.path = p;
+        wroteTmp.data = data;
+      },
+      rename: async (s: string, d: string) => {
+        renamed.src = s;
+        renamed.dest = d;
+      },
       readFile: async () => '',
       unlink: async () => {},
       readdir: async () => [],
@@ -69,9 +80,15 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
 
     const fakeGlobalState = {
       get: (_k: string) => undefined,
-      update: async (k: string, v: any) => { updatedKey = k; updatedValue = v; },
+      update: async (k: string, v: any) => {
+        updatedKey = k;
+        updatedValue = v;
+      },
     } as any;
-    const ctx = { globalState: fakeGlobalState, globalStoragePath: os.tmpdir() } as any as vscode.ExtensionContext;
+    const ctx = {
+      globalState: fakeGlobalState,
+      globalStoragePath: os.tmpdir(),
+    } as any as vscode.ExtensionContext;
     const dm = new DataManager(ctx, { fs: fakeFs });
 
     dm.startTracker();
@@ -95,8 +112,14 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
 
     const fakeFs: any = {
       mkdir: async () => {},
-      writeFile: async (p: string, data: string) => { wroteTmp.path = p; wroteTmp.data = data; },
-      rename: async (s: string, d: string) => { renamed.src = s; renamed.dest = d; },
+      writeFile: async (p: string, data: string) => {
+        wroteTmp.path = p;
+        wroteTmp.data = data;
+      },
+      rename: async (s: string, d: string) => {
+        renamed.src = s;
+        renamed.dest = d;
+      },
       readFile: async () => '',
       unlink: async () => {},
       readdir: async () => [],
@@ -104,9 +127,15 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
 
     const fakeGlobalState = {
       get: (_k: string) => undefined,
-      update: async (k: string, v: any) => { updatedKey = k; updatedValue = v; },
+      update: async (k: string, v: any) => {
+        updatedKey = k;
+        updatedValue = v;
+      },
     } as any;
-    const ctx = { globalState: fakeGlobalState, globalStoragePath: os.tmpdir() } as any as vscode.ExtensionContext;
+    const ctx = {
+      globalState: fakeGlobalState,
+      globalStoragePath: os.tmpdir(),
+    } as any as vscode.ExtensionContext;
     const svc = new TrackerService(ctx, { fs: fakeFs });
 
     svc.start();

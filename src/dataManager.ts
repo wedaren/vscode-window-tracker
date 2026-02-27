@@ -42,32 +42,28 @@ export type WindowRecord = {
  * 的调用逻辑，旨在对外提供统一的接口，简化树提供者的依赖。
  */
 export class DataManager {
-  
   private tracker?: TrackerService;
   private readonly fsImpl: typeof fs = fs;
   private readonly savedSvc: SavedService;
 
   constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
     this.fsImpl = options?.fs ?? fs;
-    const storageBase = this.context.globalStorageUri?.fsPath ?? this.context.globalStoragePath ?? os.homedir();
+    const storageBase =
+      this.context.globalStorageUri?.fsPath ?? this.context.globalStoragePath ?? os.homedir();
     try {
       void this.fsImpl.mkdir(storageBase, { recursive: true });
-    } catch {
-    }
+    } catch {}
 
     const trackerDir = configService.trackerDir;
     void (async () => {
       try {
         await this.fsImpl.mkdir(trackerDir, { recursive: true });
-      } catch {
-      }
+      } catch {}
     })();
 
-    
     this.savedSvc = new SavedService(this.context, { fs: this.fsImpl, trackerDir });
   }
 
-  
   /**
    * @docs getSavedArray
    * 返回 `SavedService` 当前的保存数组拷贝。
@@ -84,7 +80,6 @@ export class DataManager {
     return this.savedSvc.persistSavedArray(arr);
   }
 
-
   /**
    * 从磁盘读取并解析 JSON，失败时返回 undefined（不会抛出）。
    */
@@ -97,7 +92,6 @@ export class DataManager {
     }
   }
 
-
   /**
    * @docs buildDedupKeys
    * 包装器：为给定记录生成去重键数组。
@@ -106,7 +100,6 @@ export class DataManager {
     return buildDedupKeys(record);
   }
 
-  
   /**
    * @docs loadAllRecords
    * 从 tracker 文件和当前 workspace 读取并合并所有记录（含去重）。
@@ -117,14 +110,13 @@ export class DataManager {
     return this.dedupe([fromWorkspace, ...fromTracker]);
   }
 
-  
-
-  
   private loadCurrentWorkspaceRecord(): WindowRecord {
     const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
     const folderPath = workspaceFolder?.uri.fsPath;
     return {
-      title: vscode.window.activeTextEditor?.document.fileName ? path.basename(vscode.window.activeTextEditor.document.fileName) : 'Current Workspace',
+      title: vscode.window.activeTextEditor?.document.fileName
+        ? path.basename(vscode.window.activeTextEditor.document.fileName)
+        : 'Current Workspace',
       path: folderPath,
       uri: workspaceFolder?.uri.toString(),
       lastActive: Date.now(),
@@ -133,42 +125,42 @@ export class DataManager {
     };
   }
 
-  
   private async loadTrackerFiles(): Promise<WindowRecord[]> {
     const trackerDir = configService.trackerDir;
     const staleMinutes = configService.trackerFileStaleMinutes;
     const cutoff = Date.now() - (staleMinutes ?? 30) * 60 * 1000;
     try {
       const files = await this.fsImpl.readdir(trackerDir);
-      const jsonFiles = files.filter((file) => file.endsWith('.json'));
-      const records = await Promise.all(jsonFiles.map(async (file) => {
-        const filePath = path.join(trackerDir, file);
-        const raw = await this.readJson(filePath);
-        if (!raw) return [];
-        const candidate = Array.isArray(raw) ? raw : (raw && raw.windows ? raw.windows : [raw]);
-        if (Array.isArray(candidate)) {
-          const filtered = candidate.filter((r: any) => {
-            if (!r || typeof r !== 'object') return false;
-            if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
-            return true;
-          });
-          
-          return filtered as WindowRecord[];
-        }
-        return [];
-      }));
+      const jsonFiles = files.filter(file => file.endsWith('.json'));
+      const records = await Promise.all(
+        jsonFiles.map(async file => {
+          const filePath = path.join(trackerDir, file);
+          const raw = await this.readJson(filePath);
+          if (!raw) return [];
+          const candidate = Array.isArray(raw) ? raw : raw && raw.windows ? raw.windows : [raw];
+          if (Array.isArray(candidate)) {
+            const filtered = candidate.filter((r: any) => {
+              if (!r || typeof r !== 'object') return false;
+              if (typeof r.lastActive === 'number') return r.lastActive >= cutoff;
+              return true;
+            });
+
+            return filtered as WindowRecord[];
+          }
+          return [];
+        })
+      );
       return records.flat();
     } catch {
       return [];
     }
   }
 
-  
   private dedupe(records: WindowRecord[]): WindowRecord[] {
     const map = new Map<string, WindowRecord>();
     for (const record of records) {
       const keys = this.buildDedupKeys(record);
-      const winnerKey = keys.find((key) => map.has(key));
+      const winnerKey = keys.find(key => map.has(key));
       if (winnerKey) {
         const current = map.get(winnerKey)!;
         if ((record.lastActive ?? 0) > (current.lastActive ?? 0)) {
@@ -181,7 +173,6 @@ export class DataManager {
     return [...map.values()];
   }
 
-  
   /**
    * @docs isSaved
    * 判断给定的 `stableId` 是否在保存集合中。
@@ -226,7 +217,6 @@ export class DataManager {
     return normalizeSavedCandidate(savedId, lastActiveOverride);
   }
 
-  
   /**
    * @docs normalizeTrackedNodes
    * 将原始 `WindowRecord` 列表转换为用于 UI 的 `WindowNode` 数组并排序。
@@ -234,7 +224,8 @@ export class DataManager {
   public normalizeTrackedNodes(records: WindowRecord[]): WindowNode[] {
     const now = Date.now();
     const enriched: WindowNode[] = records.map((record, index) => {
-      const stableId = (buildDedupKeys(record) || [])[0] || `${record.path || record.title || 'window'}-${index}`;
+      const stableId =
+        (buildDedupKeys(record) || [])[0] || `${record.path || record.title || 'window'}-${index}`;
       let dirUri: vscode.Uri | undefined = undefined;
       if (record.uri) {
         try {
@@ -263,7 +254,7 @@ export class DataManager {
     const sorted = enriched.sort((a, b) => (b.lastActive ?? 0) - (a.lastActive ?? 0));
     return sorted;
   }
-    
+
   // ---------- combined node list ----------
   // 合并已保存和跟踪节点，确保排序和标记
   /**
@@ -354,7 +345,9 @@ export function buildTooltip(node: WindowNode): vscode.MarkdownString {
   md.appendMarkdown(`**${node.title || 'Untitled Window'}**\n\n`);
   md.appendMarkdown(`- path: ${node.path || '-'}\n`);
   md.appendMarkdown(`- pid: ${node.pid ?? '-'}\n`);
-  md.appendMarkdown(`- lastActive: ${node.lastActive ? new Date(node.lastActive).toLocaleString() : '-'}\n`);
+  md.appendMarkdown(
+    `- lastActive: ${node.lastActive ? new Date(node.lastActive).toLocaleString() : '-'}\n`
+  );
   md.appendMarkdown(`- source: ${node.source || '-'}\n`);
   md.appendMarkdown(`- status(raw): ${node.status || '-'}\n`);
   md.isTrusted = false;
@@ -379,15 +372,22 @@ export function buildContextValue(node: WindowNode): string {
  * 为树项选择图标。
  * 如果记录对应当前打开的工作区文件夹，则 `isCurrentWorkspace` 应为 true。
  */
-export function getNodeIcon(node: WindowNode, isCurrentWorkspace: boolean, dataManager: DataManager): vscode.ThemeIcon {
-  const added = (typeof node.isSaved === 'boolean') ? node.isSaved : dataManager.isSaved(node.stableId);
+export function getNodeIcon(
+  node: WindowNode,
+  isCurrentWorkspace: boolean,
+  dataManager: DataManager
+): vscode.ThemeIcon {
+  const added =
+    typeof node.isSaved === 'boolean' ? node.isSaved : dataManager.isSaved(node.stableId);
   if (isCurrentWorkspace) {
     return new vscode.ThemeIcon('repo', new vscode.ThemeColor('charts.blue'));
   }
   if (node.origin === 'tracked') {
     return new vscode.ThemeIcon('repo');
   }
-  return added ? new vscode.ThemeIcon('database') : new vscode.ThemeIcon('repo', new vscode.ThemeColor('disabledForeground'));
+  return added
+    ? new vscode.ThemeIcon('database')
+    : new vscode.ThemeIcon('repo', new vscode.ThemeColor('disabledForeground'));
 }
 
 /**
