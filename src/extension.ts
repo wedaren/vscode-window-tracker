@@ -26,8 +26,7 @@ export function activate(context: vscode.ExtensionContext) {
     }),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.addProject',
-      async (item?: WindowNode) => {
+      'vscode-window-tracker.addProject', async (item?: WindowNode) => {
         await provider.addProjectByNode(item);
       }
     ),

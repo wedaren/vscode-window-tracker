@@ -37,8 +37,7 @@ export class DataManager {
 
   constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
     this.fsImpl = options?.fs ?? fs;
-    const storageBase =
-      this.context.globalStorageUri?.fsPath ?? this.context.globalStoragePath ?? os.homedir();
+    const storageBase = this.context.globalStorageUri.fsPath;
     try {
       void this.fsImpl.mkdir(storageBase, { recursive: true });
     } catch {}
@@ -69,17 +68,6 @@ export class DataManager {
     return this.savedSvc.persistSavedArray(arr);
   }
 
-  /**
-   * 从磁盘读取并解析 JSON，失败时返回 undefined（不会抛出）。
-   */
-  private async readJson(filePath: string): Promise<any | undefined> {
-    try {
-      const content = await this.fsImpl.readFile(filePath, 'utf8');
-      return JSON.parse(content);
-    } catch {
-      return undefined;
-    }
-  }
 
   /**
    * @docs buildDedupKeys
@@ -145,26 +133,26 @@ export class DataManager {
 
   /**
    * @docs isSaved
-   * 判断给定的 `stableId` 是否在保存集合中。
+   * 判断给定的 `fsPath` 是否在保存集合中。
    */
-  public isSaved(stableId: string): boolean {
-    return this.savedSvc.isSaved(stableId);
+  public isSaved(fsPath: string): boolean {
+    return this.savedSvc.isSaved(fsPath);
   }
 
   /**
    * @docs save
-   * 将给定 `stableId` 添加到保存集合并持久化。
+   * 将给定 `fsPath` 添加到保存集合并持久化。
    */
-  public async save(stableId: string): Promise<void> {
-    await this.savedSvc.save(stableId);
+  public async save(fsPath: string): Promise<void> {
+    await this.savedSvc.save(fsPath);
   }
 
   /**
    * @docs removeSaved
-   * 从保存集合移除给定 `stableId` 并持久化。
+   * 从保存集合移除给定 `fsPath` 并持久化。
    */
-  public async removeSaved(stableId: string): Promise<void> {
-    await this.savedSvc.remove(stableId);
+  public async removeSaved(fsPath: string): Promise<void> {
+    await this.savedSvc.remove(fsPath);
   }
 
   /**
@@ -225,8 +213,6 @@ export class DataManager {
     return sorted;
   }
 
-  // ---------- combined node list ----------
-  // 合并已保存和跟踪节点，确保排序和标记
   /**
    * @docs getWindowNodes
    * 合并并返回树视图所需的完整节点列表（已保存 + 跟踪）。
