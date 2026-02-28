@@ -41,11 +41,8 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
    * @docs addProjectByNode
    * 根据节点或选择的文件夹添加项目到保存列表。
    */
-  public async addProjectByNode(node?: WindowNode, dirUri?: vscode.Uri): Promise<void> {
-    let targetUri = dirUri;
-    if (!targetUri && node && node.dirUri) {
-      targetUri = node.dirUri;
-    }
+  public async addProjectByNode(node?: WindowNode): Promise<void> {
+    let targetUri = node?.dirUri;
     if (!targetUri) {
       const picked = await vscode.window.showOpenDialog({
         canSelectFolders: true,
