@@ -54,8 +54,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
       }
       targetUri = picked[0];
     }
-    const stableId = node?.stableId ?? targetUri.toString();
-    await this.dataManager.save(stableId);
+    await this.dataManager.save(targetUri.fsPath);
 
     void this.refresh(true);
   }
