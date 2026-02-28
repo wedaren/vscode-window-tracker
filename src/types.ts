@@ -1,7 +1,16 @@
 /**
  * @docs WindowRecord
- * A minimal, serializable record representing a VS Code window/workspace.
- * Stored in tracker JSON files and consumed by the `DataManager`.
+ * 单个窗口/工作区的心跳记录，写入 tracker JSON 文件以供外部进程读取。
+ *
+ * 字段说明：
+ * - `title`: 显示名称或当前活跃编辑器文件名。
+ * - `path`: 工作区文件夹的本地路径（如果有）。
+ * - `uri`: 工作区的 URI 字符串形式（如果有）。
+ * - `pid`: 生成该记录的进程 ID。
+ * - `windowId`: 可选的窗口标识符（平台/守护进程提供）。
+ * - `lastActive`: 最近活动的时间戳（毫秒）。
+ * - `source`: 记录来源（如 `vscode-extension`、`vscode`、`saved`）。
+ * - `status`: 窗口状态字符串（例如 `focused`、`visible`、`idle`）。
  */
 export type WindowRecord = {
   title?: string;
@@ -16,8 +25,10 @@ export type WindowRecord = {
 
 /**
  * @docs WindowNode
- * UI-facing node used by the tree provider. Extends `WindowRecord` with
- * presentation fields such as `stableId`, `origin` and `relativeActive`.
+ * 在 UI 中使用的节点类型，基于 `WindowRecord` 并添加树视图/渲染相关元数据。
+ *
+ * - `stableId`: 用于去重与持久化的稳定标识符。
+ * - `origin`: 表示该节点是来自跟踪（`tracked`）还是用户保存（`saved`）。
  */
 export interface WindowNode extends WindowRecord {
   type: 'window';
