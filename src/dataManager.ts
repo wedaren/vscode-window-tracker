@@ -4,21 +4,10 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ConfigService } from './configService';
 const configService = ConfigService.getInstance();
-import { WindowNode } from './types';
+import { WindowNode, WindowRecord } from './types';
 import { buildDedupKeys, toRelativeTime, normalizeSavedCandidate } from './helpers';
 import { TrackerService } from './trackerService';
 import { SavedService } from './savedService';
-
-export type WindowRecord = {
-  title?: string;
-  path?: string;
-  uri?: string;
-  pid?: number;
-  windowId?: number | string;
-  lastActive?: number;
-  source?: string;
-  status?: string;
-};
 
 /**
  * 管理保存和跟踪窗口记录的核心服务。负责：

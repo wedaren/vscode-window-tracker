@@ -1,8 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { WindowRecord } from './dataManager';
-import { WindowNode } from './types';
+import { WindowRecord, WindowNode } from './types';
 
 // 生成去重键数组，用于判断两个记录是否代表同一窗口。
 export function buildDedupKeys(record: WindowRecord): string[] {

@@ -1,4 +1,13 @@
-import { WindowRecord } from './dataManager';
+export type WindowRecord = {
+  title?: string;
+  path?: string;
+  uri?: string;
+  pid?: number;
+  windowId?: number | string;
+  lastActive?: number;
+  source?: string;
+  status?: string;
+};
 
 export interface WindowNode extends WindowRecord {
   type: 'window';
