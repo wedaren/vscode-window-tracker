@@ -119,9 +119,9 @@ export class SavedService {
    * @docs buildSavedNodes
    * 将保存 id 列表转换为供树视图使用的 `WindowNode` 数组。
    */
-  public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
+  public buildSavedNodes(): WindowNode[] {
     return [...this.savedSet].map(savedId =>
-      normalizeSavedCandidate(savedId, trackedById?.get(savedId)?.lastActive)
+      normalizeSavedCandidate(savedId)
     );
   }
 }

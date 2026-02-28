@@ -25,7 +25,7 @@ export function toRelativeTime(timestamp: number, now = Date.now()): string {
 }
 
 // 将保存 ID 解析为 WindowNode，用于生成树视图项。
-export function normalizeSavedCandidate(savedId: string, lastActiveOverride?: number): WindowNode {
+export function normalizeSavedCandidate(savedId: string): WindowNode {
   let candidate = savedId;
   if (savedId.includes('::')) {
     candidate = savedId.split('::')[0];
@@ -49,7 +49,7 @@ export function normalizeSavedCandidate(savedId: string, lastActiveOverride?: nu
       uri: u.toString(),
       pid: undefined,
       windowId: undefined,
-      lastActive: typeof lastActiveOverride === 'number' ? lastActiveOverride : Date.now(),
+      lastActive: Date.now(),
       source: 'saved',
       status: 'idle',
       origin: 'saved',
@@ -65,7 +65,7 @@ export function normalizeSavedCandidate(savedId: string, lastActiveOverride?: nu
       uri: undefined,
       pid: undefined,
       windowId: undefined,
-      lastActive: typeof lastActiveOverride === 'number' ? lastActiveOverride : Date.now(),
+      lastActive: Date.now(),
       source: 'saved',
       status: 'idle',
       origin: 'saved',

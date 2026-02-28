@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 /**
  * @docs WindowRecord
  * 单个窗口/工作区的心跳记录，写入 tracker JSON 文件以供外部进程读取。
@@ -12,6 +13,7 @@
  * - `source`: 记录来源（如 `vscode-extension`、`vscode`、`saved`）。
  * - `status`: 窗口状态字符串（例如 `focused`、`visible`、`idle`）。
  */
+
 export type WindowRecord = {
   title?: string;
   path?: string;
@@ -34,7 +36,7 @@ export interface WindowNode extends WindowRecord {
   type: 'window';
   stableId: string;
   origin: 'tracked' | 'saved';
-  dirUri?: import('vscode').Uri;
+  dirUri?: vscode.Uri;
   relativeActive: string;
   isSaved?: boolean;
 }

@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 import { ConfigService } from './configService';
 const configService = ConfigService.getInstance();
 import { WindowNode, WindowRecord } from './types';
-import { buildDedupKeys, toRelativeTime, normalizeSavedCandidate } from './helpers';
+import { buildDedupKeys, toRelativeTime } from './helpers';
 import { TrackerService } from './trackerService';
 import { SavedService } from './savedService';
 
@@ -40,13 +40,13 @@ export class DataManager {
     const storageBase = this.context.globalStorageUri.fsPath;
     try {
       void this.fsImpl.mkdir(storageBase, { recursive: true });
-    } catch {}
+    } catch { }
 
     const trackerDir = configService.trackerDir;
     void (async () => {
       try {
         await this.fsImpl.mkdir(trackerDir, { recursive: true });
-      } catch {}
+      } catch { }
     })();
 
     this.savedSvc = new SavedService(this.context, { fs: this.fsImpl, trackerDir });
@@ -164,18 +164,6 @@ export class DataManager {
   }
 
   /**
-   * @docs buildSavedNodes
-   * 将保存 id 列表转换为 `WindowNode` 数组，供树视图使用。
-   */
-  public buildSavedNodes(trackedById?: Map<string, WindowNode>): WindowNode[] {
-    return this.savedSvc.buildSavedNodes(trackedById);
-  }
-
-  private normalizeSavedCandidate(savedId: string, lastActiveOverride?: number): WindowNode {
-    return normalizeSavedCandidate(savedId, lastActiveOverride);
-  }
-
-  /**
    * @docs normalizeTrackedNodes
    * 将原始 `WindowRecord` 列表转换为用于 UI 的 `WindowNode` 数组并排序。
    */
@@ -220,11 +208,11 @@ export class DataManager {
   public async getWindowNodes(): Promise<WindowNode[]> {
     const loaded = await this.loadAllRecords();
     const trackedNodes = this.normalizeTrackedNodes(loaded);
-    const trackedById = new Map(trackedNodes.map(n => [n.stableId, n]));
-    let addedNodes = this.buildSavedNodes(trackedById);
+    const trackedById = new Map(trackedNodes.map(n => [n.dirUri?.fsPath, n]));
+    let addedNodes = this.savedSvc.buildSavedNodes();
     const standaloneAdded: WindowNode[] = [];
     for (const a of addedNodes) {
-      const t = trackedById.get(a.stableId);
+      const t = trackedById.get(a.dirUri?.fsPath);
       if (t) {
         t.isSaved = true;
       } else {
@@ -233,7 +221,9 @@ export class DataManager {
     }
     addedNodes = standaloneAdded;
     const nodes = [...trackedNodes, ...addedNodes].sort((a, b) => {
-      if (a.origin !== b.origin) return a.origin === 'tracked' ? -1 : 1;
+      if (a.origin !== b.origin) {
+        return a.origin === 'tracked' ? -1 : 1;
+      }
       return (b.lastActive ?? 0) - (a.lastActive ?? 0);
     });
     return nodes;
