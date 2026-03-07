@@ -83,11 +83,6 @@
         "icon": "$(eye)"
       },
       {
-        "command": "vscode-window-tracker.copyPath",
-        "title": "Copy Path",
-        "icon": "$(copy)"
-      },
-      {
         "command": "vscode-window-tracker.addProject",
         "title": "Add Project",
         "icon": "$(add)"

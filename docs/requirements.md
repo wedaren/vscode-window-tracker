@@ -28,17 +28,18 @@
 
 3. 已保存管理（SavedService）
 	- 支持 `save(path)`、`remove(path)`、`isSaved(path)`、`getAllSaved()`。
-	- 保存数组同时持久化到 `globalState` 与可编辑的 `saved.json`（存放于 trackerDir 或 extension storage）。
+	- 保存数组同时持久化到 `globalState` 与可编辑的 `saved.json`（存放于 trackerDir）。
+	- 当已保存项同时被追踪且处于活跃状态时，自动刷新 `saved.json` 的 `lastActive`。
 
 4. 树视图（TreeProvider）与 UI
 	- 在 Activity Bar 中提供 Window Tracker 视图。
-	- 每一项显示标题（优先 basename）、相对活跃时间、tooltip（包含详细元数据）。
-	- 支持上下文菜单：Refresh、Reveal、Copy Path、Add Project、Remove Project。
+	- 每一项显示标题（优先 basename）、相对活跃时间（中文“xx 前”）、tooltip（包含详细元数据）。
+	- 支持上下文菜单：Refresh、打开项目（open folder）、Add Project、Remove Project、Close Window、Open saved.json。
 	- 图标选择：当前 workspace 标示为突出图标，已保存项使用数据库图标。
 
 5. 配置项
-	- `vscode-window-tracker.trackerDir`：tracker 文件目录（支持 `~` 展开）。
-	- `vscode-window-tracker.idleThresholdMinutes`：判定 idle 的阈值（分钟）。
+	- `vscode-window-tracker.trackerDir`：tracker 文件目录（支持 `~` 展开，且限制在用户主目录内）。
+	- `vscode-window-tracker.idleThresholdMinutes`：判定 idle 的阈值（分钟，当前未在代码中使用）。
 	- `vscode-window-tracker.heartbeatIntervalSeconds`：心跳写入间隔（秒）。
 	- `vscode-window-tracker.trackerFileStaleMinutes`：忽略过期 tracker 文件的阈值（分钟）。
 	- `vscode-window-tracker.trackerAutoCleanup`：激活时自动清理过期文件（布尔）。
@@ -48,7 +49,7 @@
 
 7. 边界与错误处理
 	- 任何 I/O 都应有容错（读取失败返回空列表，写入失败记录日志且不阻塞主流程）。
-	- 配置目录无法创建时回退到 extension storage 目录。
+	- trackerDir 不合法或不在用户主目录下时回退到默认目录 `~/.vscode-window-tracker`。
 
 ## 数据模型
 
@@ -67,15 +68,16 @@
 ## 文件与格式
 
 - Tracker 文件：每个窗口对应一个 JSON 文件（可由其他进程/脚本生成），数组或单对象均支持。文件名可包含窗口 id 或 PID。
-- saved.json：用户可编辑的文件（优先读取），内容是已保存路径的数组，扩展还应将该数据同步到 `globalState` 以防丢失。
+- saved.json：用户可编辑的文件（优先读取），内容是已保存项数组（含 `id` 与可选 `lastActive`），并同步到 `globalState` 作为镜像。
 
 ## 命令清单（需与 package.json 保持一致）
 
 - `vscode-window-tracker.refresh` — 刷新视图
-- `vscode-window-tracker.reveal` — 在资源管理器中 reveal
-- `vscode-window-tracker.copyPath` — 复制路径
+- `vscode-window-tracker.reveal` — 打开项目（open folder）
 - `vscode-window-tracker.addProject` — 添加到已保存
 - `vscode-window-tracker.removeProject` — 从已保存移除
+- `vscode-window-tracker.openSavedJson` — 打开 saved.json
+- `vscode-window-tracker.closeWindow` — 关闭当前窗口
 
 ## 非功能需求
 
