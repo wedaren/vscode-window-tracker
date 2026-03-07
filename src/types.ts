@@ -26,6 +26,12 @@ export type WindowRecord = {
 };
 
 /**
+ * @docs SavedItem
+ * 表示保存列表中的条目，兼容旧格式（string id）和新格式（object）。
+ */
+export type SavedItem = { id: string; lastActive?: number };
+
+/**
  * @docs WindowNode
  * 在 UI 中使用的节点类型，基于 `WindowRecord` 并添加树视图/渲染相关元数据。
  *

@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { WindowRecord, WindowNode } from './types';
+import { WindowRecord, WindowNode, SavedItem } from './types';
 
 // 生成去重键数组，用于判断两个记录是否代表同一窗口。
 export function buildDedupKeys(record: WindowRecord): string[] {
@@ -25,7 +25,8 @@ export function toRelativeTime(timestamp: number, now = Date.now()): string {
 }
 
 // 将保存 ID 解析为 WindowNode，用于生成树视图项。
-export function normalizeSavedCandidate(savedId: string): WindowNode {
+export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
+  const savedId = saved.id;
   let candidate = savedId;
   if (savedId.includes('::')) {
     candidate = savedId.split('::')[0];
@@ -33,6 +34,7 @@ export function normalizeSavedCandidate(savedId: string): WindowNode {
   if (candidate.startsWith('~')) {
     candidate = candidate.replace(/^~(?=$|\/|\\)/, os.homedir());
   }
+  const providedLastActive = saved.lastActive ?? Date.now();
   try {
     let u: vscode.Uri;
     if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)) {
@@ -49,12 +51,12 @@ export function normalizeSavedCandidate(savedId: string): WindowNode {
       uri: u.toString(),
       pid: undefined,
       windowId: undefined,
-      lastActive: Date.now(),
+      lastActive: providedLastActive,
       source: 'saved',
       status: 'idle',
       origin: 'saved',
       dirUri: u,
-      relativeActive: 'now',
+      relativeActive: toRelativeTime(providedLastActive),
     };
   } catch {
     return {
@@ -65,12 +67,12 @@ export function normalizeSavedCandidate(savedId: string): WindowNode {
       uri: undefined,
       pid: undefined,
       windowId: undefined,
-      lastActive: Date.now(),
+      lastActive: providedLastActive,
       source: 'saved',
       status: 'idle',
       origin: 'saved',
       dirUri: undefined,
-      relativeActive: 'now',
+      relativeActive: toRelativeTime(providedLastActive),
     };
   }
 }

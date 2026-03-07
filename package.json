@@ -40,16 +40,6 @@
     "configuration": {
       "title": "vscode-window-tracker",
       "properties": {
-        "vscode-window-tracker.preferDaemon": {
-          "type": "boolean",
-          "default": false,
-          "description": "When true, prefer a local daemon file as authoritative source (if available)."
-        },
-        "vscode-window-tracker.daemonFile": {
-          "type": "string",
-          "default": "~/.vscode-window-daemon.json",
-          "description": "Path to a local daemon JSON file (tilde expanded)."
-        },
         "vscode-window-tracker.trackerDir": {
           "type": "string",
           "default": "~/.vscode-window-tracker",
@@ -106,6 +96,12 @@
         "title": "Remove Project",
         "icon": "$(trash)"
       }
+      ,
+      {
+        "command": "vscode-window-tracker.openSavedJson",
+        "title": "Open saved.json",
+        "icon": "$(edit)"
+      }
     ],
     "menus": {
       "view/title": [
@@ -116,6 +112,12 @@
         },
         {
           "command": "vscode-window-tracker.addProject",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        }
+        ,
+        {
+          "command": "vscode-window-tracker.openSavedJson",
           "when": "view == vscode-window-tracker.windowsView",
           "group": "navigation"
         }

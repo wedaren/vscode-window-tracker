@@ -1,10 +1,9 @@
 import * as fs from 'fs/promises';
-import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
 import { ConfigService } from './configService';
 const configService = ConfigService.getInstance();
-import { WindowNode, WindowRecord } from './types';
+import { WindowNode, WindowRecord, SavedItem } from './types';
 import { buildDedupKeys, toRelativeTime } from './helpers';
 import { TrackerService } from './trackerService';
 import { SavedService } from './savedService';
@@ -12,7 +11,7 @@ import { SavedService } from './savedService';
 /**
  * 管理保存和跟踪窗口记录的核心服务。负责：
  *
- * 1. 从多种来源（daemon 文件、tracker 目录、当前工作区）收集
+ * 1. 从多种来源（tracker 目录、当前工作区、以及 saved.json/globalState 中的“已保存”列表）收集
  *    窗口信息并去重。
  * 2. 维护用户“已保存”列表，对外提供增删查改接口并持久化到
  *    可编辑的 saved.json 以及 globalState 中。
@@ -64,7 +63,7 @@ export class DataManager {
    * @docs persistSavedArray
    * 将保存数组持久化到 `globalState` 与 `saved.json`。
    */
-  public async persistSavedArray(arr: string[]): Promise<void> {
+  public async persistSavedArray(arr: SavedItem[]): Promise<void> {
     return this.savedSvc.persistSavedArray(arr);
   }
 
@@ -209,7 +208,7 @@ export class DataManager {
     const loaded = await this.loadAllRecords();
     const trackedNodes = this.normalizeTrackedNodes(loaded);
     const trackedById = new Map(trackedNodes.map(n => [n.dirUri?.fsPath, n]));
-    let addedNodes = this.savedSvc.buildSavedNodes();
+    let addedNodes = await this.savedSvc.buildSavedNodes();
     const standaloneAdded: WindowNode[] = [];
     for (const a of addedNodes) {
       const t = trackedById.get(a.dirUri?.fsPath);

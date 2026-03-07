@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import { WindowTreeDataProvider } from './treeProvider';
 import { WindowNode } from './types';
 import { createDataManager } from './dataManager';
+import { ConfigService } from './configService';
 
 let dataManager: ReturnType<typeof createDataManager> | undefined;
 let extContext: vscode.ExtensionContext | undefined;
@@ -30,6 +31,28 @@ export function activate(context: vscode.ExtensionContext) {
         await provider.addProjectByNode(item);
       }
     ),
+    // 打开 saved.json 供用户编辑（视图标题栏按钮触发）
+    vscode.commands.registerCommand('vscode-window-tracker.openSavedJson', async () => {
+      try {
+        const cfg = ConfigService.getInstance();
+        const trackerDir = cfg.trackerDir;
+        const savedPath = require('path').join(trackerDir, 'saved.json');
+        const fs = require('fs/promises');
+        try {
+          await fs.access(savedPath);
+        } catch {
+          // 文件不存在，创建一个空数组文件
+          try {
+            await fs.mkdir(trackerDir, { recursive: true });
+          } catch {}
+          await fs.writeFile(savedPath, JSON.stringify([], null, 2), 'utf8');
+        }
+        const doc = await vscode.workspace.openTextDocument(savedPath);
+        await vscode.window.showTextDocument(doc, { preview: false });
+      } catch (err) {
+        void vscode.window.showErrorMessage('无法打开 saved.json: ' + String(err));
+      }
+    }),
     vscode.commands.registerCommand(
       'vscode-window-tracker.removeProject',
       async (item?: WindowNode) => {
