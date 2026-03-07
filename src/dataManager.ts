@@ -223,17 +223,28 @@ export class DataManager {
     }
 
     let addedNodes = await this.savedSvc.buildSavedNodes();
+    const savedLastActiveUpdates: SavedItem[] = [];
     const standaloneAdded: WindowNode[] = [];
     for (const a of addedNodes) {
       const key = a.dirUri?.fsPath || a.stableId;
       const t = key ? trackedById.get(key) : undefined;
       if (t) {
         t.isSaved = true;
+        if (
+          t.status === 'focused' &&
+          typeof t.lastActive === 'number' &&
+          t.lastActive > (a.lastActive ?? 0)
+        ) {
+          savedLastActiveUpdates.push({ id: a.stableId, lastActive: t.lastActive });
+        }
       } else {
         standaloneAdded.push(a);
       }
     }
     addedNodes = standaloneAdded;
+    if (savedLastActiveUpdates.length > 0) {
+      await this.savedSvc.updateLastActiveBatch(savedLastActiveUpdates);
+    }
     const nodes = [...trackedNodes, ...addedNodes].sort((a, b) => {
       if (a.origin !== b.origin) {
         return a.origin === 'tracked' ? -1 : 1;

@@ -144,4 +144,26 @@ export class SavedService {
     }
     return [];
   }
+
+  /**
+   * @docs updateLastActiveBatch
+   * 批量更新已保存条目的 lastActive（仅当新值更大时）。
+   */
+  public async updateLastActiveBatch(updates: SavedItem[]): Promise<void> {
+    if (!updates || updates.length === 0) return;
+    let changed = false;
+    const updateMap = new Map(updates.map(u => [u.id, u.lastActive]));
+    this.savedArray = this.savedArray.map(item => {
+      const next = updateMap.get(item.id);
+      if (typeof next === 'number' && next > (item.lastActive ?? 0)) {
+        changed = true;
+        return { ...item, lastActive: next };
+      }
+      return item;
+    });
+    if (changed) {
+      this.savedSet = new Set(this.savedArray.map(s => s.id));
+      await this.persistSavedArray(this.savedArray);
+    }
+  }
 }

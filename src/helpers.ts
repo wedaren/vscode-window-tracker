@@ -15,13 +15,13 @@ export function buildDedupKeys(record: WindowRecord): string[] {
 // 将时间戳转为相对时间字符串（例如 "5m"、"3d"）。
 export function toRelativeTime(timestamp: number, now = Date.now()): string {
   const diffMs = now - timestamp;
-  if (diffMs < 60_000) return 'now';
+  if (diffMs < 60_000) return '刚刚';
   const mins = Math.floor(diffMs / 60_000);
-  if (mins < 60) return `${mins}m`;
+  if (mins < 60) return `${mins} 分钟前`;
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h`;
+  if (hours < 24) return `${hours} 小时前`;
   const days = Math.floor(hours / 24);
-  return `${days}d`;
+  return `${days} 天前`;
 }
 
 // 将保存 ID 解析为 WindowNode，用于生成树视图项。
