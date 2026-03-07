@@ -23,6 +23,24 @@ export function activate(context: vscode.ExtensionContext) {
       if (!item || item.type !== 'window' || !item.dirUri) {
         return;
       }
+
+      // 安全校验：解析 URI scheme。
+      // 只允许本地文件 (file) 或 VS Code 虚拟文件系统 (vscode-vfs, vscode-test-web 等常用安全 scheme)。
+      // 防止恶意 saved.json 包含 ssh://, vsls:// 等危险 scheme 导致 RCE/SSRF。
+      const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
+      const scheme = item.dirUri.scheme;
+
+      if (!allowedSchemes.includes(scheme)) {
+        const choice = await vscode.window.showWarningMessage(
+          `警告: 该项目试图使用非标准协议 (${scheme}) 打开路径。是否继续？`,
+          '继续打开',
+          '取消'
+        );
+        if (choice !== '继续打开') {
+          return;
+        }
+      }
+
       await vscode.commands.executeCommand('vscode.openFolder', item.dirUri, true);
     }),
 

@@ -211,11 +211,22 @@ export class DataManager {
   public async getWindowNodes(): Promise<WindowNode[]> {
     const loaded = await this.loadAllRecords();
     const trackedNodes = this.normalizeTrackedNodes(loaded);
-    const trackedById = new Map(trackedNodes.map(n => [n.dirUri?.fsPath, n]));
+    
+    // 建立 ID -> 节点映射。优先使用 dirUri.fsPath，其次是 stableId。
+    // 过滤掉没有有效标识符的记录，防止 map 冲突导致 UI 状态标记错误。
+    const trackedById = new Map<string, WindowNode>();
+    for (const n of trackedNodes) {
+      const key = n.dirUri?.fsPath || n.stableId;
+      if (key) {
+        trackedById.set(key, n);
+      }
+    }
+
     let addedNodes = await this.savedSvc.buildSavedNodes();
     const standaloneAdded: WindowNode[] = [];
     for (const a of addedNodes) {
-      const t = trackedById.get(a.dirUri?.fsPath);
+      const key = a.dirUri?.fsPath || a.stableId;
+      const t = key ? trackedById.get(key) : undefined;
       if (t) {
         t.isSaved = true;
       } else {
