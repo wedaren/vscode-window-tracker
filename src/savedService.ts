@@ -1,91 +1,147 @@
-import * as path from 'path';
+import * as fs from 'fs/promises';
 import * as os from 'os';
+import * as path from 'path';
 import * as vscode from 'vscode';
-import { WindowNode } from './types';
-import { DataManager } from './dataManager';
+import { normalizeSavedCandidate } from './helpers';
+import { WindowNode, SavedItem } from './types';
 
+/**
+ * 管理 "已保存" 列表的存储和快照逻辑。
+ *
+ * 该类负责：
+ *
+ * 1. 从 `ExtensionContext.globalState` 初始化保存列表。
+ * 2. 在内存中使用 Array + Set 组合以便快速查找和保留顺序。
+ * 3. 将更新持久化到两个位置：
+ *    - `globalState`（扩展数据存储）
+ *    - tracker 目录下的 `saved.json`（用户可编辑）
+ *
+ * 此类与 DataManager 解耦，便于单独测试并在其他组件中复用。
+ * 它只关心保存列表本身，不处理跟踪文件或 UI 表示。
+ *
+ * 使用示例：
+ * ```ts
+ * const svc = new SavedService(context, { trackerDir: '/path/to/dir' });
+ * await svc.save('some-id');
+ * const list = svc.getSavedArray();
+ * ```
+ */
 export class SavedService {
-    private dataManager: DataManager;
-    private savedSet: Set<string>;
+  private savedFile = '';
+  private savedArray: SavedItem[] = [];
+  private savedSet: Set<string> = new Set();
+  private readonly fsImpl: typeof fs;
 
-    constructor(dataManager: DataManager) {
-        this.dataManager = dataManager;
-        this.savedSet = new Set<string>(dataManager.getSavedArray());
-    }
+  constructor(
+    private readonly context: vscode.ExtensionContext,
+    options?: { fs?: typeof fs; trackerDir?: string }
+  ) {
+    this.fsImpl = options?.fs ?? fs;
+    const trackerDir = options?.trackerDir ?? os.homedir();
+    this.savedFile = path.join(trackerDir, 'saved.json');
+    // Do not read from globalState for saved list; saved.json is authoritative.
+    // savedArray will be loaded on demand by buildSavedNodes().
+  }
 
-    isSaved(stableId: string) {
-        return this.savedSet.has(stableId);
-    }
+  /**
+   * @docs getSavedArray
+   * 获取当前保存列表的拷贝。
+   */
+  public getSavedArray(): string[] {
+    return this.savedArray.map(s => s.id);
+  }
 
-    async save(stableId: string) {
-        this.savedSet.add(stableId);
-        await this.dataManager.persistSavedArray([...this.savedSet]);
-    }
+  /**
+   * @docs persistSavedArray
+   * 将保存数组持久化到 `globalState` 和磁盘 `saved.json` 文件。
+   */
+  public async persistSavedArray(arr: SavedItem[]): Promise<void> {
+    this.savedArray = arr;
+    this.savedSet = new Set(this.savedArray.map(s => s.id));
+    try {
+      // keep globalState as a mirror for quick access, but saved.json is source of truth
+      await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
+    } catch {}
+    void this.writeJson(this.savedFile, this.savedArray);
+  }
 
-    async remove(stableId: string) {
-            if (this.savedSet.has(stableId)) {
-            this.savedSet.delete(stableId);
-            await this.dataManager.persistSavedArray([...this.savedSet]);
-        }
+  // 通过 tmp 文件原子写入 JSON
+  private async writeJson(filePath: string, data: unknown): Promise<void> {
+    try {
+      const tmp = `${filePath}.tmp`;
+      await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
+      await fs.rename(tmp, filePath);
+    } catch {
+      // ignore
     }
+  }
 
-    getAll() {
-        return [...this.savedSet];
-    }
+  /**
+   * @docs isSaved
+   * 检查给定 id 是否已被保存。
+   */
+  public isSaved(id: string): boolean {
+    return this.savedSet.has(id);
+  }
 
-    buildSavedNodes(trackedById?: Map<string, import('./types').WindowNode>): WindowNode[] {
-        return [...this.savedSet].map((savedId) => this.normalizeCandidate(savedId, trackedById?.get(savedId)?.lastActive));
+  /**
+   * @docs save
+   * 将 id 添加到保存集合并持久化。
+   */
+  public async save(id: string): Promise<void> {
+    const now = Date.now();
+    let found = false;
+    this.savedArray = this.savedArray.map(s => {
+      if (s.id === id) {
+        found = true;
+        return { id, lastActive: now };
+      }
+      return s;
+    });
+    if (!found) {
+      this.savedArray.push({ id, lastActive: now });
     }
+    this.savedSet = new Set(this.savedArray.map(s => s.id));
+    await this.persistSavedArray(this.savedArray);
+  }
 
-    private normalizeCandidate(savedId: string, lastActiveOverride?: number): WindowNode {
-        let candidate = savedId;
-        if (savedId.includes('::')) {
-            candidate = savedId.split('::')[0];
-        }
-        if (candidate.startsWith('~')) {
-            candidate = candidate.replace(/^~(?=$|\/|\\)/, os.homedir());
-        }
-        try {
-            let u: vscode.Uri;
-            if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(candidate)) {
-                u = vscode.Uri.parse(candidate);
-            } else {
-                u = vscode.Uri.file(candidate);
-            }
-            const p = u.fsPath || candidate;
-            return {
-                type: 'window',
-                stableId: savedId,
-                title: path.basename(p) || savedId,
-                path: p,
-                uri: u.toString(),
-                pid: undefined,
-                windowId: undefined,
-                lastActive: typeof lastActiveOverride === 'number' ? lastActiveOverride : Date.now(),
-                source: 'saved',
-                status: 'idle',
-                origin: 'saved',
-                dirUri: u,
-                relativeActive: 'now',
-            };
-        } catch {
-            return {
-                type: 'window',
-                stableId: savedId,
-                title: savedId,
-                path: undefined,
-                uri: undefined,
-                pid: undefined,
-                windowId: undefined,
-                lastActive: typeof lastActiveOverride === 'number' ? lastActiveOverride : Date.now(),
-                source: 'saved',
-                status: 'idle',
-                origin: 'saved',
-                dirUri: undefined,
-                relativeActive: 'now',
-            };
-        }
+  /**
+   * @docs remove
+   * 从保存集合移除 id 并持久化。
+   */
+  public async remove(id: string): Promise<void> {
+    if (this.savedSet.has(id)) {
+      this.savedSet.delete(id);
+      this.savedArray = this.savedArray.filter(s => s.id !== id);
+      await this.persistSavedArray(this.savedArray);
     }
+  }
+
+  /**
+   * @docs getAllSaved
+   * 返回保存集合中的所有 id。
+   */
+  public getAllSaved(): string[] {
+    return [...this.savedSet];
+  }
+
+  /**
+   * @docs buildSavedNodes
+   * 将保存 id 列表转换为供树视图使用的 `WindowNode` 数组。
+   */
+  public async buildSavedNodes(): Promise<WindowNode[]> {
+    try {
+      const raw = await this.fsImpl.readFile(this.savedFile, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        // assume array of SavedItem objects (no backward-compat strings)
+        this.savedArray = parsed as SavedItem[];
+        this.savedSet = new Set(this.savedArray.map(s => s.id));
+        return this.savedArray.map(savedItem => normalizeSavedCandidate(savedItem));
+      }
+    } catch {
+      // ignore and fallthrough
+    }
+    return [];
+  }
 }
-
-export default SavedService;

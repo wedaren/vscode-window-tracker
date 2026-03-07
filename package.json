@@ -40,18 +40,9 @@
     "configuration": {
       "title": "vscode-window-tracker",
       "properties": {
-        "vscode-window-tracker.preferDaemon": {
-          "type": "boolean",
-          "default": false,
-          "description": "When true, prefer a local daemon file as authoritative source (if available)."
-        },
-        "vscode-window-tracker.daemonFile": {
-          "type": "string",
-          "default": "~/.vscode-window-daemon.json",
-          "description": "Path to a local daemon JSON file (tilde expanded)."
-        },
         "vscode-window-tracker.trackerDir": {
           "type": "string",
+          "scope": "machine-overridable",
           "default": "~/.vscode-window-tracker",
           "description": "Fallback directory containing tracker JSON files."
         },
@@ -106,6 +97,12 @@
         "title": "Remove Project",
         "icon": "$(trash)"
       }
+      ,
+      {
+        "command": "vscode-window-tracker.openSavedJson",
+        "title": "Open saved.json",
+        "icon": "$(edit)"
+      }
     ],
     "menus": {
       "view/title": [
@@ -116,6 +113,12 @@
         },
         {
           "command": "vscode-window-tracker.addProject",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        }
+        ,
+        {
+          "command": "vscode-window-tracker.openSavedJson",
           "when": "view == vscode-window-tracker.windowsView",
           "group": "navigation"
         }
@@ -145,7 +148,9 @@
     "watch": "tsc -watch -p ./",
     "pretest": "npm run compile && npm run lint",
     "lint": "eslint src",
-    "test": "vscode-test"
+    "test": "vscode-test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "devDependencies": {
     "@types/vscode": "^1.109.0",
@@ -155,6 +160,7 @@
     "eslint": "^9.39.2",
     "typescript": "^5.9.3",
     "@vscode/test-cli": "^0.0.12",
-    "@vscode/test-electron": "^2.5.2"
+    "@vscode/test-electron": "^2.5.2",
+    "prettier": "^2.8.8"
   }
 }

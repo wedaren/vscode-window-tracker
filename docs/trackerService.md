@@ -1,10 +1,16 @@
 ````markdown
 # TrackerService 文档
 
+> **当前实现**：`TrackerService` 现在再次作为独立模块存在于 `src/trackerService.ts`，
+> 以便于单元测试和代码组织。
+>
+> 历史记录：该类在早期版本中曾经单独存在，随后在 2026 年的重构中
+> 暂时合并到 `DataManager` 中；本次重构将其拆分回单独文件，并且
+> 仍然保留通过 `DataManager` 访问的便利方法。
+
 ## 概述
 
-`TrackerService` 位于 `src/trackerService.ts`，封装了扩展向磁盘写入 tracker JSON 文件的所有行为：原子写入、周期心跳、启动时清理过期文件、以及在扩展停用或进程退出时移除当前会话文件。
-
+轨迹写入与生命周期管理的原理（原 `TrackerService` 提供的功能）包括：原子写入、周期心跳、启动时清理过期文件、以及在扩展停用或进程退出时移除当前会话文件。
 该服务的目标是将与文件系统、计时器和进程信号相关的副作用从 `extension.ts` 中剥离，提升可测试性与可维护性。
 
 ## 公共 API
@@ -62,5 +68,4 @@ export function activate(context: vscode.ExtensionContext) {
 ## 维护者提示
 
 - `trackerService` 的行为与用户配置紧密相关，请在修改默认配置键时在 `package.json` 中同步更新 `contributes.configuration`。
-
 ````

@@ -1,12 +1,48 @@
-import { WindowRecord } from './dataManager';
+import * as vscode from 'vscode';
+/**
+ * @docs WindowRecord
+ * 单个窗口/工作区的心跳记录，写入 tracker JSON 文件以供外部进程读取。
+ *
+ * 字段说明：
+ * - `title`: 显示名称或当前活跃编辑器文件名。
+ * - `path`: 工作区文件夹的本地路径（如果有）。
+ * - `uri`: 工作区的 URI 字符串形式（如果有）。
+ * - `pid`: 生成该记录的进程 ID。
+ * - `windowId`: 可选的窗口标识符（平台/守护进程提供）。
+ * - `lastActive`: 最近活动的时间戳（毫秒）。
+ * - `source`: 记录来源（如 `vscode-extension`、`vscode`、`saved`）。
+ * - `status`: 窗口状态字符串（例如 `focused`、`visible`、`idle`）。
+ */
 
-// Shared WindowNode shape used by tree provider and managers
+export type WindowRecord = {
+  title?: string;
+  path?: string;
+  uri?: string;
+  pid?: number;
+  windowId?: number | string;
+  lastActive?: number;
+  source?: string;
+  status?: string;
+};
+
+/**
+ * @docs SavedItem
+ * 表示保存列表中的条目，兼容旧格式（string id）和新格式（object）。
+ */
+export type SavedItem = { id: string; lastActive?: number };
+
+/**
+ * @docs WindowNode
+ * 在 UI 中使用的节点类型，基于 `WindowRecord` 并添加树视图/渲染相关元数据。
+ *
+ * - `stableId`: 用于去重与持久化的稳定标识符。
+ * - `origin`: 表示该节点是来自跟踪（`tracked`）还是用户保存（`saved`）。
+ */
 export interface WindowNode extends WindowRecord {
-	type: 'window';
- 	stableId: string;
- 	origin: 'tracked' | 'saved';
- 	dirUri?: import('vscode').Uri;
- 	relativeActive: string;
- 	// true when the item (regardless of origin) exists in the user's saved list
- 	isSaved?: boolean;
+  type: 'window';
+  stableId: string;
+  origin: 'tracked' | 'saved';
+  dirUri?: vscode.Uri;
+  relativeActive: string;
+  isSaved?: boolean;
 }

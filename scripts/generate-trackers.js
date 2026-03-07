@@ -13,7 +13,7 @@ function isoNow(offsetMinutes = 0) {
 
 for (let i = 0; i < count; i++) {
   const pid = 20000 + Math.floor(Math.random() * 10000);
-  const name = `proj-sim-${i+1}`;
+  const name = `proj-sim-${i + 1}`;
   const rec = {
     title: name,
     path: path.join(process.cwd(), name),
@@ -22,7 +22,7 @@ for (let i = 0; i < count; i++) {
     windowId: `sim-${pid}-${i}`,
     lastActive: isoNow(i * 5),
     source: 'sim',
-    status: i % 2 === 0 ? 'visible' : 'idle'
+    status: i % 2 === 0 ? 'visible' : 'idle',
   };
   const fname = `vscode-${rec.pid}-${Date.now()}-${i}.json`;
   fs.writeFileSync(path.join(dir, fname), JSON.stringify(rec, null, 2), { encoding: 'utf8' });
