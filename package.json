@@ -3,7 +3,7 @@
   "displayName": "vscode-window-tracker",
   "publisher": "wedaren",
   "description": "Track and manage VS Code workspace windows efficiently",
-  "version": "0.0.8",
+  "version": "0.0.9",
   "repository": {
     "type": "git",
     "url": "https://github.com/wedaren/vscode-window-tracker"
@@ -96,8 +96,7 @@
         "command": "vscode-window-tracker.removeProject",
         "title": "Remove Project",
         "icon": "$(trash)"
-      }
-      ,
+      },
       {
         "command": "vscode-window-tracker.openSavedJson",
         "title": "Open saved.json",
@@ -115,8 +114,7 @@
           "command": "vscode-window-tracker.addProject",
           "when": "view == vscode-window-tracker.windowsView",
           "group": "navigation"
-        }
-        ,
+        },
         {
           "command": "vscode-window-tracker.openSavedJson",
           "when": "view == vscode-window-tracker.windowsView",
