@@ -101,6 +101,11 @@
         "command": "vscode-window-tracker.openSavedJson",
         "title": "Open saved.json",
         "icon": "$(edit)"
+      },
+      {
+        "command": "vscode-window-tracker.closeWindow",
+        "title": "Close Window",
+        "icon": "$(close)"
       }
     ],
     "menus": {
@@ -124,7 +129,7 @@
       "view/item/context": [
         {
           "command": "vscode-window-tracker.reveal",
-          "when": "viewItem =~ /windowItem(:|$)/ && view == vscode-window-tracker.windowsView",
+          "when": "viewItem =~ /windowItem(:|$)/ && !(viewItem =~ /:current$/) && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
         },
         {
@@ -135,6 +140,11 @@
         {
           "command": "vscode-window-tracker.removeProject",
           "when": "viewItem == 'windowItem:saved' && view == vscode-window-tracker.windowsView",
+          "group": "inline@1"
+        },
+        {
+          "command": "vscode-window-tracker.closeWindow",
+          "when": "viewItem =~ /:current$/ && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
         }
       ]

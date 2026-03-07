@@ -96,20 +96,17 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
     const title = formatTitle(element);
     const item = new vscode.TreeItem(title, vscode.TreeItemCollapsibleState.None);
     item.id = `${element.origin}:${element.stableId}`;
-    item.iconPath = getNodeIcon(
-      element,
-      isCurrentWorkspace(element.path, element.uri),
-      this.dataManager
-    );
+    const current = isCurrentWorkspace(element.path, element.uri);
+    item.iconPath = getNodeIcon(element, current, this.dataManager);
     item.description = buildDescription(element);
     item.tooltip = buildTooltip(element);
-    item.contextValue = buildContextValue(element);
+    const baseContext = buildContextValue(element);
+    item.contextValue = current ? `${baseContext}:current` : baseContext;
     try {
       if (element.origin === 'saved') {
         console.debug(`[vscode-window-tracker] contextValue for ${item.id}: ${item.contextValue}`);
       }
     } catch {}
-    const current = isCurrentWorkspace(element.path, element.uri);
     if (current) {
       item.label = { label: title, highlights: [[0, title.length]] };
     }

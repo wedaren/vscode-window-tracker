@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { WindowTreeDataProvider } from './treeProvider';
 import { WindowNode } from './types';
-import { createDataManager } from './dataManager';
+import { createDataManager, isCurrentWorkspace } from './dataManager';
 import { ConfigService } from './configService';
 
 let dataManager: ReturnType<typeof createDataManager> | undefined;
@@ -78,6 +78,15 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         await provider.removeProjectById(item.stableId);
+      }
+    ),
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.closeWindow',
+      async (item?: WindowNode) => {
+        if (item && !isCurrentWorkspace(item.path, item.uri)) {
+          return;
+        }
+        await vscode.commands.executeCommand('workbench.action.closeWindow');
       }
     )
   );
