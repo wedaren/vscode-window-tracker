@@ -293,7 +293,8 @@ export class TrackerService {
       const cutoff = Date.now() - configService.trackerFileStaleMinutes * 60 * 1000;
       const files = await this.fsImpl.readdir(configService.trackerDir).catch(() => []);
       for (const f of files) {
-        if (!f.endsWith('.json')) continue;
+        // 仅处理扩展写入的 tracker 文件，避免将 saved.json 或其他任意 json 误识别为 tracker
+        if (!f.endsWith('.json') || !f.startsWith('vscode-')) continue;
         const fp = path.join(configService.trackerDir, f);
         try {
           const c = await this.fsImpl.readFile(fp, 'utf8');
@@ -325,7 +326,8 @@ export class TrackerService {
     const cutoff = Date.now() - (staleMinutes ?? 30) * 60 * 1000;
     try {
       const files = await this.fsImpl.readdir(trackerDir).catch(() => []);
-      const jsonFiles = (files || []).filter((f: string) => f.endsWith('.json'));
+      // 只读取以 vscode- 前缀生成的 tracker 文件，排除 saved.json 等用户文件
+      const jsonFiles = (files || []).filter((f: string) => f.endsWith('.json') && f.startsWith('vscode-'));
       const records = await Promise.all(
         jsonFiles.map(async (file: string) => {
           const filePath = path.join(trackerDir, file);
