@@ -5,6 +5,7 @@ import { WindowTreeDataProvider } from './treeProvider';
 import { WindowNode } from './types';
 import { createDataManager, isCurrentWorkspace } from './dataManager';
 import { ConfigService } from './configService';
+import { buildKeybindingSnippet, isKeybindingRegistered, findKeybindingLocation } from './keybindingChecker';
 
 let dataManager: ReturnType<typeof createDataManager> | undefined;
 let extContext: vscode.ExtensionContext | undefined;
@@ -87,6 +88,77 @@ export function activate(context: vscode.ExtensionContext) {
           return;
         }
         await vscode.commands.executeCommand('workbench.action.closeWindow');
+      }
+    ),
+
+    // 通过 stableId 打开项目（支持用户在 keybindings.json 中用此命令绑定自定义快捷键）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.openByStableId',
+      async (args?: { stableId?: string }) => {
+        const stableId = args?.stableId;
+        if (!stableId) {
+          void vscode.window.showWarningMessage('缺少 stableId 参数，无法打开项目。');
+          return;
+        }
+        const dm = createDataManager(extContext!);
+        const nodes = await dm.getWindowNodes();
+        const node = nodes.find(n => n.stableId === stableId);
+        if (!node?.dirUri) {
+          void vscode.window.showWarningMessage(`找不到对应的项目: ${stableId}`);
+          return;
+        }
+        const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
+        if (!allowedSchemes.includes(node.dirUri.scheme)) {
+          const choice = await vscode.window.showWarningMessage(
+            `警告: 该项目试图使用非标准协议 (${node.dirUri.scheme})。是否继续？`,
+            '继续打开', '取消'
+          );
+          if (choice !== '继续打开') return;
+        }
+        await vscode.commands.executeCommand('vscode.openFolder', node.dirUri, true);
+      }
+    ),
+
+    // 手动验证快捷键是否已在任意 Profile 的 keybindings.json 中注册。
+    // 已注册则提示成功；未注册则复制配置片段并提供打开 keybindings.json 的入口。
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.verifyKeybinding',
+      async (item?: WindowNode) => {
+        if (!item?.keybinding || !item.stableId) {
+          void vscode.window.showWarningMessage('该项目没有配置快捷键，请先在 saved.json 中添加 keybinding 字段。');
+          return;
+        }
+        const registered = await isKeybindingRegistered(item.stableId, undefined, extContext?.globalStorageUri?.fsPath);
+        if (registered) {
+          const choice = await vscode.window.showInformationMessage(
+            `✅ 快捷键 "${item.keybinding}" 已在 keybindings.json 中注册。`,
+            '打开 keybindings.json'
+          );
+          if (choice === '打开 keybindings.json') {
+            const loc = await findKeybindingLocation(item.stableId, undefined, extContext?.globalStorageUri?.fsPath);
+            if (loc) {
+              const doc = await vscode.workspace.openTextDocument(vscode.Uri.file(loc.filePath));
+              const pos = new vscode.Position(loc.line, 0);
+              await vscode.window.showTextDocument(doc, {
+                preview: false,
+                selection: new vscode.Range(pos, pos),
+              });
+            } else {
+              await vscode.commands.executeCommand('workbench.action.openGlobalKeybindingsFile');
+            }
+          }
+          return;
+        }
+        // 未注册：复制配置片段，提供打开文件入口
+        const snippet = buildKeybindingSnippet(item.stableId, item.keybinding);
+        await vscode.env.clipboard.writeText(snippet);
+        const choice = await vscode.window.showWarningMessage(
+          `⚠️ 未在任意 Profile 的 keybindings.json 中找到注册记录。配置片段已复制到剪贴板，请粘贴后保存。`,
+          '打开 keybindings.json'
+        );
+        if (choice === '打开 keybindings.json') {
+          await vscode.commands.executeCommand('workbench.action.openGlobalKeybindingsFile');
+        }
       }
     )
   );

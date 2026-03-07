@@ -4,7 +4,7 @@ import * as vscode from 'vscode';
 import { ConfigService } from './configService';
 const configService = ConfigService.getInstance();
 import { WindowNode, WindowRecord, SavedItem } from './types';
-import { buildDedupKeys, toRelativeTime } from './helpers';
+import { buildDedupKeys, toRelativeTime, formatKeybindingLabel } from './helpers';
 import { TrackerService } from './trackerService';
 import { SavedService } from './savedService';
 
@@ -230,6 +230,10 @@ export class DataManager {
       const t = key ? trackedById.get(key) : undefined;
       if (t) {
         t.isSaved = true;
+        // 将 saved.json 中配置的 keybinding 合并到 tracked 节点，供 buildContextValue 使用
+        if (a.keybinding) {
+          t.keybinding = a.keybinding;
+        }
         if (
           t.status === 'focused' &&
           typeof t.lastActive === 'number' &&
@@ -302,8 +306,13 @@ export function formatTitle(node: WindowNode): string {
 
 /**
  * 生成显示在树项右侧的简短描述。
+ * 如果节点配置了 keybinding，展示快捷键提示。
  */
 export function buildDescription(node: WindowNode): string {
+  if (node.keybinding) {
+    const kbLabel = formatKeybindingLabel(node.keybinding);
+    return `${node.relativeActive} · ${kbLabel}`;
+  }
   return `${node.relativeActive}`;
 }
 
@@ -320,19 +329,27 @@ export function buildTooltip(node: WindowNode): vscode.MarkdownString {
   );
   md.appendMarkdown(`- source: ${node.source || '-'}\n`);
   md.appendMarkdown(`- status(raw): ${node.status || '-'}\n`);
+  if (node.keybinding) {
+    md.appendMarkdown(`- keybinding: \`${node.keybinding}\`\n`);
+  }
   md.isTrusted = false;
   return md;
 }
 
 /**
  * 用于菜单贡献的上下文值字符串。
+ * 已保存且配置了 keybinding 时附加 `:kb`，供右键“验证快捷键”命令使用。
  */
 export function buildContextValue(node: WindowNode): string {
   if (node.origin === 'saved') {
-    return 'windowItem:saved';
+    const kb = node.keybinding ? ':kb' : '';
+    return `windowItem:saved${kb}`;
   }
   if (node.origin === 'tracked') {
-    if (node.isSaved) return 'windowItem:tracked:saved';
+    if (node.isSaved) {
+      const kb = node.keybinding ? ':kb' : '';
+      return `windowItem:tracked:saved${kb}`;
+    }
     return 'windowItem:tracked:allowAdd';
   }
   return 'windowItem:tracked';

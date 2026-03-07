@@ -24,6 +24,28 @@ export function toRelativeTime(timestamp: number, now = Date.now()): string {
   return `${days} 天前`;
 }
 
+/**
+ * @docs formatKeybindingLabel
+ * 将快捷键字符串转为适合显示的形式（macOS 使用符号，其他平台原样）。
+ * 例如："cmd+j cmd+k" → "⌘J ⌘K"
+ */
+export function formatKeybindingLabel(key: string): string {
+  if (process.platform !== 'darwin') {
+    return key;
+  }
+  return key
+    .split(' ')
+    .map(chord =>
+      chord
+        .replace(/ctrl\+/gi, '⌃')
+        .replace(/cmd\+/gi, '⌘')
+        .replace(/alt\+/gi, '⌥')
+        .replace(/shift\+/gi, '⇧')
+        .toUpperCase()
+    )
+    .join(' ');
+}
+
 // 将保存 ID 解析为 WindowNode，用于生成树视图项。
 export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
   const savedId = saved.id;
@@ -57,6 +79,7 @@ export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
       origin: 'saved',
       dirUri: u,
       relativeActive: toRelativeTime(providedLastActive),
+      keybinding: saved.keybinding,
     };
   } catch {
     return {
@@ -73,6 +96,7 @@ export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
       origin: 'saved',
       dirUri: undefined,
       relativeActive: toRelativeTime(providedLastActive),
+      keybinding: saved.keybinding,
     };
   }
 }

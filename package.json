@@ -101,6 +101,16 @@
         "command": "vscode-window-tracker.closeWindow",
         "title": "Close Window",
         "icon": "$(close)"
+      },
+      {
+        "command": "vscode-window-tracker.openByStableId",
+        "title": "Open Project by ID",
+        "icon": "$(folder-opened)"
+      },
+      {
+        "command": "vscode-window-tracker.verifyKeybinding",
+        "title": "验证快捷键是否已注册",
+        "icon": "$(key)"
       }
     ],
     "menus": {
@@ -141,6 +151,11 @@
           "command": "vscode-window-tracker.closeWindow",
           "when": "viewItem =~ /:current$/ && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
+        },
+        {
+          "command": "vscode-window-tracker.verifyKeybinding",
+          "when": "viewItem =~ /:kb/ && view == vscode-window-tracker.windowsView",
+          "group": "inline@2"
         }
       ]
     }

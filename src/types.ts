@@ -28,8 +28,10 @@ export type WindowRecord = {
 /**
  * @docs SavedItem
  * 表示保存列表中的条目，兼容旧格式（string id）和新格式（object）。
+ *
+ * - `keybinding`: 用户在 saved.json 中自定义的快捷键字符串（例如 `"cmd+j cmd+k"`）。
  */
-export type SavedItem = { id: string; lastActive?: number };
+export type SavedItem = { id: string; lastActive?: number; keybinding?: string };
 
 /**
  * @docs WindowNode
@@ -45,4 +47,6 @@ export interface WindowNode extends WindowRecord {
   dirUri?: vscode.Uri;
   relativeActive: string;
   isSaved?: boolean;
+  /** 用户在 saved.json 为此项设置的快捷键字符串，例如 "cmd+j cmd+k" */
+  keybinding?: string;
 }
