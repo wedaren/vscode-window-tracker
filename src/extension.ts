@@ -1,4 +1,6 @@
 import * as vscode from 'vscode';
+import * as path from 'path';
+import * as fs from 'fs/promises';
 import { WindowTreeDataProvider } from './treeProvider';
 import { WindowNode } from './types';
 import { createDataManager } from './dataManager';
@@ -49,13 +51,11 @@ export function activate(context: vscode.ExtensionContext) {
         await provider.addProjectByNode(item);
       }
     ),
-    // 打开 saved.json 供用户编辑（视图标题栏按钮触发）
     vscode.commands.registerCommand('vscode-window-tracker.openSavedJson', async () => {
       try {
         const cfg = ConfigService.getInstance();
         const trackerDir = cfg.trackerDir;
-        const savedPath = require('path').join(trackerDir, 'saved.json');
-        const fs = require('fs/promises');
+        const savedPath = path.join(trackerDir, 'saved.json');
         try {
           await fs.access(savedPath);
         } catch {

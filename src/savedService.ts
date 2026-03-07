@@ -94,7 +94,7 @@ export class SavedService {
     this.savedArray = this.savedArray.map(s => {
       if (s.id === id) {
         found = true;
-        return { id, lastActive: now } as SavedItem;
+        return { id, lastActive: now };
       }
       return s;
     });
