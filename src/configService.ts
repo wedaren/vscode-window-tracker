@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as os from 'os';
+import * as path from 'path';
 
 /**
  * ConfigService: 集中式配置读取与变更通知服务
@@ -187,11 +188,28 @@ export class ConfigService {
   public load(): void {
     const cfg = vscode.workspace.getConfiguration(this.section);
     const rawTrackerDir = cfg.get<string>('trackerDir', '~/.vscode-window-tracker')!;
-    this.trackerDir = rawTrackerDir.replace(/^~(?=$|\/|\\)/, os.homedir());
+    this.trackerDir = this.validateAndResolvePath(rawTrackerDir);
     this.heartbeatIntervalSeconds = cfg.get<number>('heartbeatIntervalSeconds', 5) ?? 5;
     this.trackerFileStaleMinutes = cfg.get<number>('trackerFileStaleMinutes', 30) ?? 30;
     this.trackerAutoCleanup = cfg.get<boolean>('trackerAutoCleanup', true) ?? true;
     this.loaded = true;
+  }
+
+  /**
+   * 验证并解析路径，防止目录遍历攻击，并确保路径在用户目录下。
+   * 用户提供的路径如果不在用户主目录下，将回退到默认位置。
+   */
+  private validateAndResolvePath(rawPath: string): string {
+    const defaultPath = path.join(os.homedir(), '.vscode-window-tracker');
+    const resolved = rawPath.replace(/^~(?=$|\/|\\)/, os.homedir());
+    const absolutePath = path.resolve(resolved);
+
+    // 基础安全检查：确保路径在用户主目录内 (或者是用户主目录本身)
+    if (!absolutePath.startsWith(os.homedir())) {
+      console.warn(`[ConfigService] Invalid trackerDir: ${rawPath}. Must be within user home directory. Falling back to default.`);
+      return defaultPath;
+    }
+    return absolutePath;
   }
 
   /** 确保已加载（按需/延迟加载支持） */
@@ -216,14 +234,14 @@ export class ConfigService {
 
   /**
    * @docs resolvePath
-   * 展开以 `~` 开头的路径配置为用户主目录并返回。
+   * 展开以 `~` 开头的路径配置为用户主目录并返回，并带上安全校验。
    * @param key 配置键
    * @param fallback 回退路径
    */
   public resolvePath(key: string, fallback: string): string {
     this.ensureLoaded();
     const raw = this.get<string>(key, fallback);
-    return raw.replace(/^~(?=$|\/|\\)/, os.homedir());
+    return this.validateAndResolvePath(raw);
   }
 
   /**

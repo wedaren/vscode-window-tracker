@@ -42,6 +42,7 @@
       "properties": {
         "vscode-window-tracker.trackerDir": {
           "type": "string",
+          "scope": "machine-overridable",
           "default": "~/.vscode-window-tracker",
           "description": "Fallback directory containing tracker JSON files."
         },

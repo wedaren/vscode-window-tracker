@@ -36,17 +36,21 @@ export class DataManager {
 
   constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
     this.fsImpl = options?.fs ?? fs;
-    const storageBase = this.context.globalStorageUri.fsPath;
-    try {
-      void this.fsImpl.mkdir(storageBase, { recursive: true });
-    } catch { }
+    const storageBase = this.context.globalStorageUri?.fsPath || '';
+    if (storageBase) {
+      try {
+        void this.fsImpl.mkdir(storageBase, { recursive: true });
+      } catch { }
+    }
 
     const trackerDir = configService.trackerDir;
-    void (async () => {
-      try {
-        await this.fsImpl.mkdir(trackerDir, { recursive: true });
-      } catch { }
-    })();
+    if (trackerDir) {
+      void (async () => {
+        try {
+          await this.fsImpl.mkdir(trackerDir, { recursive: true });
+        } catch { }
+      })();
+    }
 
     this.savedSvc = new SavedService(this.context, { fs: this.fsImpl, trackerDir });
   }

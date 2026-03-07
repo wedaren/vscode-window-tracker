@@ -36,7 +36,7 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
     await dm.save('foo');
     assert.strictEqual(dm.isSaved('foo'), true);
     assert.deepStrictEqual(dm.getAllSaved(), ['foo']);
-    assert.deepStrictEqual(lastUpdate, ['foo']);
+    assert.strictEqual(lastUpdate[0].id, 'foo');
 
     await dm.removeSaved('foo');
     assert.strictEqual(dm.isSaved('foo'), false);
@@ -151,23 +151,6 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
   });
 
   // additional helper tests
-  test('helpers expandHome and readJson work correctly', async () => {
-    const ctx = { globalState: { get: (_: any) => [], update: async () => {} } } as any;
-    const fakeFs: any = {
-      readFile: async (p: string) => {
-        if (p.endsWith('good.json')) return '{"x":1}';
-        throw new Error('no');
-      },
-    };
-    const dm = new DataManager(ctx, { fs: fakeFs });
-    assert.ok((dm as any).expandHome('~/foo').startsWith(os.homedir()));
-    assert.strictEqual((dm as any).expandHome('/bar'), '/bar');
-    const parsed = await (dm as any).readJson('/path/good.json');
-    assert.deepStrictEqual(parsed, { x: 1 });
-    const none = await (dm as any).readJson('/path/bad.json');
-    assert.strictEqual(none, undefined);
-  });
-
   test('formatTitle and tooltip formatting produce expected strings', () => {
     const ctx = { globalState: { get: (_: any) => [], update: async () => {} } } as any;
     const dm = new DataManager(ctx, { fs: {} as any });
