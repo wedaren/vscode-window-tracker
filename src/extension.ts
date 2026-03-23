@@ -52,6 +52,12 @@ export function activate(context: vscode.ExtensionContext) {
         await provider.addProjectByNode(item);
       }
     ),
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.editProject',
+      async (item?: WindowNode) => {
+        await provider.editProjectByNode(item);
+      }
+    ),
     vscode.commands.registerCommand('vscode-window-tracker.openSavedJson', async () => {
       try {
         const cfg = ConfigService.getInstance();

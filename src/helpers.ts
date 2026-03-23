@@ -1,7 +1,7 @@
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { WindowRecord, WindowNode, SavedItem } from './types';
+import { WindowRecord, WindowNode, SavedItem, SAVED_COLORS, SavedColor } from './types';
 
 // 生成去重键数组，用于判断两个记录是否代表同一窗口。
 export function buildDedupKeys(record: WindowRecord): string[] {
@@ -46,6 +46,54 @@ export function formatKeybindingLabel(key: string): string {
     .join(' ');
 }
 
+/**
+ * @docs normalizeSavedItem
+ * 将用户编辑的 saved.json 条目规范化为内部 `SavedItem` 结构。
+ */
+export function normalizeSavedItem(raw: unknown): SavedItem | undefined {
+  if (typeof raw === 'string') {
+    return { id: raw };
+  }
+  if (!raw || typeof raw !== 'object') {
+    return undefined;
+  }
+
+  const candidate = raw as Record<string, unknown>;
+  if (typeof candidate.id !== 'string' || candidate.id.trim() === '') {
+    return undefined;
+  }
+
+  const displayName =
+    typeof candidate.displayName === 'string' && candidate.displayName.trim() !== ''
+      ? candidate.displayName.trim()
+      : undefined;
+  const color = isSavedColor(candidate.color) ? candidate.color : undefined;
+  const lastActive =
+    typeof candidate.lastActive === 'number' && Number.isFinite(candidate.lastActive)
+      ? candidate.lastActive
+      : undefined;
+  const keybinding =
+    typeof candidate.keybinding === 'string' && candidate.keybinding.trim() !== ''
+      ? candidate.keybinding.trim()
+      : undefined;
+
+  return {
+    id: candidate.id,
+    lastActive,
+    keybinding,
+    displayName,
+    color,
+  };
+}
+
+/**
+ * @docs isSavedColor
+ * 判断值是否为受支持的基础颜色。
+ */
+export function isSavedColor(value: unknown): value is SavedColor {
+  return typeof value === 'string' && (SAVED_COLORS as readonly string[]).includes(value);
+}
+
 // 将保存 ID 解析为 WindowNode，用于生成树视图项。
 export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
   const savedId = saved.id;
@@ -80,6 +128,9 @@ export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
       dirUri: u,
       relativeActive: toRelativeTime(providedLastActive),
       keybinding: saved.keybinding,
+      displayName: saved.displayName,
+      color: saved.color,
+      savedItemId: saved.id,
     };
   } catch {
     return {
@@ -97,6 +148,9 @@ export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
       dirUri: undefined,
       relativeActive: toRelativeTime(providedLastActive),
       keybinding: saved.keybinding,
+      displayName: saved.displayName,
+      color: saved.color,
+      savedItemId: saved.id,
     };
   }
 }

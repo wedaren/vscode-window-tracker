@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import { createDataManager } from './dataManager';
 import { ConfigService } from './configService';
 const configService = ConfigService.getInstance();
-import { WindowNode } from './types';
+import { SavedColor, WindowNode } from './types';
 import {
   formatTitle,
   buildDescription,
@@ -69,6 +69,42 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
   }
 
   /**
+   * @docs editProjectByNode
+   * 点击树节点后按步骤编辑展示名和基础颜色。
+   */
+  public async editProjectByNode(node?: WindowNode): Promise<void> {
+    if (!node || node.stableId === 'placeholder-no-data') {
+      return;
+    }
+
+    const savedId = this.dataManager.resolveNodeSavedId(node);
+    if (!savedId) {
+      return;
+    }
+
+    const displayName = await vscode.window.showInputBox({
+      title: `编辑项目: ${formatTitle(node)}`,
+      prompt: '第一步：输入展示名。留空表示不配置展示名',
+      value: node.displayName || '',
+      ignoreFocusOut: true,
+    });
+    if (displayName === undefined) {
+      return;
+    }
+
+    const color = await pickColor(node.color);
+    if (color === undefined) {
+      return;
+    }
+
+    await this.dataManager.upsertSavedMetadata(savedId, {
+      displayName: displayName.trim() || undefined,
+      color,
+    });
+    void this.refresh(true);
+  }
+
+  /**
    * @docs refresh
    * 刷新树数据，必要时触发视图更新。
    */
@@ -110,6 +146,13 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
     if (current) {
       item.label = { label: title, highlights: [[0, title.length]] };
     }
+    if (element.stableId !== 'placeholder-no-data') {
+      item.command = {
+        command: 'vscode-window-tracker.editProject',
+        title: 'Edit Project',
+        arguments: [element],
+      };
+    }
     item.accessibilityInformation = {
       label: `${title}, ${element.relativeActive}`,
       role: 'treeitem',
@@ -148,3 +191,45 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
     return [];
   }
 }
+
+function describeColor(color?: SavedColor): string {
+  return color ? colorLabelMap[color] : '未设置';
+}
+
+async function pickColor(current?: SavedColor): Promise<SavedColor | undefined> {
+  const picked = await vscode.window.showQuickPick(
+    [
+      {
+        label: '不配置颜色',
+        description: current ? `当前颜色：${colorLabelMap[current]}` : '保持为空',
+        value: null,
+      },
+      ...Object.entries(colorLabelMap).map(([value, label]) => ({
+        label,
+        description: value === current ? '当前颜色' : undefined,
+        value: value as SavedColor,
+      })),
+    ],
+    {
+      title: '第二步：设置颜色',
+      placeHolder: '选择一个基础颜色；选“不配置颜色”表示清空',
+      ignoreFocusOut: true,
+    }
+  );
+  if (!picked) {
+    return undefined;
+  }
+  return picked.value ?? undefined;
+}
+
+const colorLabelMap: Record<SavedColor, string> = {
+  blue: '蓝色',
+  green: '绿色',
+  yellow: '黄色',
+  orange: '橙色',
+  red: '红色',
+  pink: '粉色',
+  purple: '紫色',
+  cyan: '青色',
+  gray: '灰色',
+};

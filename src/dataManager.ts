@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as vscode from 'vscode';
 import { ConfigService } from './configService';
 const configService = ConfigService.getInstance();
-import { WindowNode, WindowRecord, SavedItem } from './types';
+import { WindowNode, WindowRecord, SavedColor, SavedItem } from './types';
 import { buildDedupKeys, toRelativeTime, formatKeybindingLabel } from './helpers';
 import { TrackerService } from './trackerService';
 import { SavedService } from './savedService';
@@ -151,6 +151,17 @@ export class DataManager {
   }
 
   /**
+   * @docs upsertSavedMetadata
+   * 更新指定保存项的展示名与颜色；若不存在则自动创建。
+   */
+  public async upsertSavedMetadata(
+    id: string,
+    metadata: { displayName?: string; color?: SavedColor }
+  ): Promise<void> {
+    await this.savedSvc.upsertMetadata(id, metadata);
+  }
+
+  /**
    * @docs removeSaved
    * 从保存集合移除给定 `fsPath` 并持久化。
    */
@@ -164,6 +175,14 @@ export class DataManager {
    */
   public getAllSaved(): string[] {
     return this.savedSvc.getAllSaved();
+  }
+
+  /**
+   * @docs resolveNodeSavedId
+   * 解析节点对应的保存项 id，供编辑 saved.json 元数据使用。
+   */
+  public resolveNodeSavedId(node: WindowNode): string | undefined {
+    return node.savedItemId || node.dirUri?.fsPath || node.path || node.uri || node.stableId;
   }
 
   /**
@@ -234,6 +253,9 @@ export class DataManager {
         if (a.keybinding) {
           t.keybinding = a.keybinding;
         }
+        t.displayName = a.displayName;
+        t.color = a.color;
+        t.savedItemId = a.savedItemId || a.stableId;
         if (
           t.status === 'focused' &&
           typeof t.lastActive === 'number' &&
@@ -290,6 +312,14 @@ export function createDataManager(ctx: vscode.ExtensionContext, options?: { fs?:
  * 优先显示文件/URI 的 basename，回退为原始 title。
  */
 export function formatTitle(node: WindowNode): string {
+  const originalTitle = getOriginalTitle(node);
+  if (node.displayName) {
+    return `${node.displayName} (${originalTitle})`;
+  }
+  return originalTitle;
+}
+
+function getOriginalTitle(node: WindowNode): string {
   if (node.path) {
     return path.basename(node.path);
   }
@@ -321,7 +351,10 @@ export function buildDescription(node: WindowNode): string {
  */
 export function buildTooltip(node: WindowNode): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
-  md.appendMarkdown(`**${node.title || 'Untitled Window'}**\n\n`);
+  md.appendMarkdown(`**${formatTitle(node)}**\n\n`);
+  md.appendMarkdown(`- originalTitle: ${getOriginalTitle(node)}\n`);
+  md.appendMarkdown(`- displayName: ${node.displayName || '-'}\n`);
+  md.appendMarkdown(`- color: ${node.color || '-'}\n`);
   md.appendMarkdown(`- path: ${node.path || '-'}\n`);
   md.appendMarkdown(`- pid: ${node.pid ?? '-'}\n`);
   md.appendMarkdown(
@@ -366,6 +399,11 @@ export function getNodeIcon(
 ): vscode.ThemeIcon {
   const added =
     typeof node.isSaved === 'boolean' ? node.isSaved : dataManager.isSaved(node.stableId);
+  const color = getColorTheme(node.color);
+  if (color) {
+    const iconId = isCurrentWorkspace ? 'repo' : node.origin === 'tracked' ? 'repo' : 'database';
+    return new vscode.ThemeIcon(iconId, color);
+  }
   if (isCurrentWorkspace) {
     return new vscode.ThemeIcon('repo', new vscode.ThemeColor('charts.blue'));
   }
@@ -375,6 +413,31 @@ export function getNodeIcon(
   return added
     ? new vscode.ThemeIcon('database')
     : new vscode.ThemeIcon('repo', new vscode.ThemeColor('disabledForeground'));
+}
+
+function getColorTheme(color?: SavedColor): vscode.ThemeColor | undefined {
+  switch (color) {
+    case 'blue':
+      return new vscode.ThemeColor('charts.blue');
+    case 'green':
+      return new vscode.ThemeColor('charts.green');
+    case 'yellow':
+      return new vscode.ThemeColor('charts.yellow');
+    case 'orange':
+      return new vscode.ThemeColor('charts.orange');
+    case 'red':
+      return new vscode.ThemeColor('charts.red');
+    case 'pink':
+      return new vscode.ThemeColor('charts.purple');
+    case 'purple':
+      return new vscode.ThemeColor('charts.purple');
+    case 'cyan':
+      return new vscode.ThemeColor('charts.blue');
+    case 'gray':
+      return new vscode.ThemeColor('descriptionForeground');
+    default:
+      return undefined;
+  }
 }
 
 /**

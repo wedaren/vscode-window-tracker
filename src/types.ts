@@ -26,12 +26,36 @@ export type WindowRecord = {
 };
 
 /**
+ * @docs SavedColor
+ * 已保存项目支持的基础颜色枚举。
+ */
+export const SAVED_COLORS = [
+  'blue',
+  'green',
+  'yellow',
+  'orange',
+  'red',
+  'pink',
+  'purple',
+  'cyan',
+  'gray',
+] as const;
+
+export type SavedColor = (typeof SAVED_COLORS)[number];
+
+/**
  * @docs SavedItem
  * 表示保存列表中的条目，兼容旧格式（string id）和新格式（object）。
  *
  * - `keybinding`: 用户在 saved.json 中自定义的快捷键字符串（例如 `"cmd+j cmd+k"`）。
  */
-export type SavedItem = { id: string; lastActive?: number; keybinding?: string };
+export type SavedItem = {
+  id: string;
+  lastActive?: number;
+  keybinding?: string;
+  displayName?: string;
+  color?: SavedColor;
+};
 
 /**
  * @docs WindowNode
@@ -49,4 +73,7 @@ export interface WindowNode extends WindowRecord {
   isSaved?: boolean;
   /** 用户在 saved.json 为此项设置的快捷键字符串，例如 "cmd+j cmd+k" */
   keybinding?: string;
+  displayName?: string;
+  color?: SavedColor;
+  savedItemId?: string;
 }

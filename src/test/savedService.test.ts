@@ -24,4 +24,40 @@ suite('SavedService 单元测试', () => {
     await svc.remove('foo');
     assert.strictEqual(svc.isSaved('foo'), false);
   });
+
+  test('buildSavedNodes 支持 displayName 和 color', async () => {
+    const fakeState: any = { get: (_: string) => [], update: async () => {} };
+    const fakeFs: any = {
+      readFile: async () =>
+        JSON.stringify([{ id: '/tmp/demo', displayName: '演示项目', color: 'blue' }]),
+    };
+    const ctx = { globalState: fakeState, globalStoragePath: os.tmpdir() } as any;
+    const svc = new SavedService(ctx, { fs: fakeFs, trackerDir: os.tmpdir() });
+
+    const nodes = await svc.buildSavedNodes();
+
+    assert.strictEqual(nodes.length, 1);
+    assert.strictEqual(nodes[0].displayName, '演示项目');
+    assert.strictEqual(nodes[0].color, 'blue');
+  });
+
+  test('upsertMetadata 会创建并更新保存项元数据', async () => {
+    let written: any;
+    const fakeState: any = { get: (_: string) => [], update: async () => {} };
+    const fakeFs: any = {
+      readFile: async () => '[]',
+      writeFile: async (_path: string, data: string) => {
+        written = JSON.parse(data);
+      },
+      rename: async () => {},
+    };
+    const ctx = { globalState: fakeState, globalStoragePath: os.tmpdir() } as any;
+    const svc = new SavedService(ctx, { fs: fakeFs, trackerDir: os.tmpdir() });
+
+    await svc.upsertMetadata('/tmp/demo', { displayName: '演示项目', color: 'green' });
+
+    assert.strictEqual(written[0].id, '/tmp/demo');
+    assert.strictEqual(written[0].displayName, '演示项目');
+    assert.strictEqual(written[0].color, 'green');
+  });
 });

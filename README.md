@@ -50,6 +50,28 @@
 
 - 快速切换到历史工作区：在 `Window Tracker` 列表中找到目标项，使用 `Reveal` 在新窗口中打开该目录。
 - 固定常用项目：用 `Add Project` 将某些目录加入“已添加项目”，它们会在视图中优先显示，便于长期管理。
+- 点击任意项目：会弹出 Quick Pick，可直接设置展示名与基础颜色；展示名会以“展示名（原名）”形式显示。
+
+**saved.json 自定义示例**
+
+```json
+[
+	{
+		"id": "/Users/name/workspace/demo-app",
+		"displayName": "演示项目",
+		"color": "blue"
+	},
+	{
+		"id": "/Users/name/workspace/admin-console",
+		"displayName": "后台",
+		"color": "orange"
+	}
+]
+```
+
+- `id`：项目路径或可解析 URI。
+- `displayName`：可选，配置后显示为“展示名（原名）”。
+- `color`：可选，支持 `blue`、`green`、`yellow`、`orange`、`red`、`pink`、`purple`、`cyan`、`gray`，用于节点图标标识。
 
 **故障排查**
 

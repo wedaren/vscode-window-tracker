@@ -88,6 +88,11 @@
         "icon": "$(add)"
       },
       {
+        "command": "vscode-window-tracker.editProject",
+        "title": "Edit Project",
+        "icon": "$(pencil)"
+      },
+      {
         "command": "vscode-window-tracker.removeProject",
         "title": "Remove Project",
         "icon": "$(trash)"
@@ -141,6 +146,11 @@
           "command": "vscode-window-tracker.addProject",
           "when": "viewItem == 'windowItem:tracked:allowAdd' && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
+        },
+        {
+          "command": "vscode-window-tracker.editProject",
+          "when": "viewItem =~ /windowItem(:|$)/ && view == vscode-window-tracker.windowsView",
+          "group": "inline@2"
         },
         {
           "command": "vscode-window-tracker.removeProject",

@@ -2,7 +2,7 @@ import * as fs from 'fs/promises';
 import * as os from 'os';
 import * as path from 'path';
 import * as vscode from 'vscode';
-import { normalizeSavedCandidate } from './helpers';
+import { normalizeSavedCandidate, normalizeSavedItem } from './helpers';
 import { WindowNode, SavedItem } from './types';
 
 /**
@@ -31,6 +31,7 @@ export class SavedService {
   private savedArray: SavedItem[] = [];
   private savedSet: Set<string> = new Set();
   private readonly fsImpl: typeof fs;
+  private loaded = false;
 
   constructor(
     private readonly context: vscode.ExtensionContext,
@@ -52,12 +53,27 @@ export class SavedService {
   }
 
   /**
+   * @docs getSavedItems
+   * 返回当前保存条目的浅拷贝，供上层合并显示元数据。
+   */
+  public getSavedItems(): SavedItem[] {
+    return [...this.savedArray];
+  }
+
+  /**
    * @docs persistSavedArray
    * 将保存数组持久化到 `globalState` 和磁盘 `saved.json` 文件。
    */
   public async persistSavedArray(arr: SavedItem[]): Promise<void> {
-    this.savedArray = arr;
+    this.savedArray = arr.map(item => ({
+      id: item.id,
+      lastActive: item.lastActive,
+      keybinding: item.keybinding,
+      displayName: item.displayName,
+      color: item.color,
+    }));
     this.savedSet = new Set(this.savedArray.map(s => s.id));
+    this.loaded = true;
     try {
       // keep globalState as a mirror for quick access, but saved.json is source of truth
       await this.context.globalState.update('vscode-window-tracker.saved', this.savedArray);
@@ -69,11 +85,31 @@ export class SavedService {
   private async writeJson(filePath: string, data: unknown): Promise<void> {
     try {
       const tmp = `${filePath}.tmp`;
-      await fs.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
-      await fs.rename(tmp, filePath);
+      await this.fsImpl.writeFile(tmp, JSON.stringify(data, null, 2), 'utf8');
+      await this.fsImpl.rename(tmp, filePath);
     } catch {
       // ignore
     }
+  }
+
+  private async ensureLoaded(): Promise<void> {
+    if (this.loaded) {
+      return;
+    }
+    try {
+      const raw = await this.fsImpl.readFile(this.savedFile, 'utf8');
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) {
+        this.savedArray = parsed
+          .map(item => normalizeSavedItem(item))
+          .filter((item): item is SavedItem => Boolean(item));
+        this.savedSet = new Set(this.savedArray.map(s => s.id));
+      }
+    } catch {
+      this.savedArray = [];
+      this.savedSet = new Set();
+    }
+    this.loaded = true;
   }
 
   /**
@@ -89,12 +125,13 @@ export class SavedService {
    * 将 id 添加到保存集合并持久化。
    */
   public async save(id: string): Promise<void> {
+    await this.ensureLoaded();
     const now = Date.now();
     let found = false;
     this.savedArray = this.savedArray.map(s => {
       if (s.id === id) {
         found = true;
-        return { id, lastActive: now };
+        return { ...s, id, lastActive: now };
       }
       return s;
     });
@@ -110,11 +147,44 @@ export class SavedService {
    * 从保存集合移除 id 并持久化。
    */
   public async remove(id: string): Promise<void> {
+    await this.ensureLoaded();
     if (this.savedSet.has(id)) {
       this.savedSet.delete(id);
       this.savedArray = this.savedArray.filter(s => s.id !== id);
       await this.persistSavedArray(this.savedArray);
     }
+  }
+
+  /**
+   * @docs upsertMetadata
+   * 更新或创建保存条目的展示元数据，并同步更新时间。
+   */
+  public async upsertMetadata(id: string, metadata: Partial<SavedItem>): Promise<void> {
+    await this.ensureLoaded();
+    const now = Date.now();
+    let found = false;
+    this.savedArray = this.savedArray.map(item => {
+      if (item.id !== id) {
+        return item;
+      }
+      found = true;
+      return {
+        ...item,
+        lastActive: now,
+        displayName: metadata.displayName,
+        color: metadata.color,
+      };
+    });
+    if (!found) {
+      this.savedArray.push({
+        id,
+        lastActive: now,
+        displayName: metadata.displayName,
+        color: metadata.color,
+      });
+    }
+    this.savedSet = new Set(this.savedArray.map(s => s.id));
+    await this.persistSavedArray(this.savedArray);
   }
 
   /**
@@ -130,19 +200,8 @@ export class SavedService {
    * 将保存 id 列表转换为供树视图使用的 `WindowNode` 数组。
    */
   public async buildSavedNodes(): Promise<WindowNode[]> {
-    try {
-      const raw = await this.fsImpl.readFile(this.savedFile, 'utf8');
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        // assume array of SavedItem objects (no backward-compat strings)
-        this.savedArray = parsed as SavedItem[];
-        this.savedSet = new Set(this.savedArray.map(s => s.id));
-        return this.savedArray.map(savedItem => normalizeSavedCandidate(savedItem));
-      }
-    } catch {
-      // ignore and fallthrough
-    }
-    return [];
+    await this.ensureLoaded();
+    return this.savedArray.map(savedItem => normalizeSavedCandidate(savedItem));
   }
 
   /**

@@ -154,9 +154,9 @@ suite('DataManager 保存/跟踪/追踪服务测试', () => {
   test('formatTitle and tooltip formatting produce expected strings', () => {
     const ctx = { globalState: { get: (_: any) => [], update: async () => {} } } as any;
     const dm = new DataManager(ctx, { fs: {} as any });
-    const node: any = { title: 'T', relativeActive: 'now' };
-    assert.strictEqual(formatTitle(node), 'T');
+    const node: any = { title: 'T', displayName: '展示名', relativeActive: 'now' };
+    assert.strictEqual(formatTitle(node), '展示名 (T)');
     const tip = buildTooltip(node);
-    assert.ok(tip.value.includes('T'));
+    assert.ok(tip.value.includes('展示名 (T)'));
   });
 });
