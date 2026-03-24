@@ -144,7 +144,7 @@
         },
         {
           "command": "vscode-window-tracker.addProject",
-          "when": "viewItem == 'windowItem:tracked:allowAdd' && view == vscode-window-tracker.windowsView",
+          "when": "viewItem =~ /windowItem:tracked:allowAdd/ && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
         },
         {

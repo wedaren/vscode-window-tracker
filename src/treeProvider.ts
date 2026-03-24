@@ -146,13 +146,6 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
     if (current) {
       item.label = { label: title, highlights: [[0, title.length]] };
     }
-    if (element.stableId !== 'placeholder-no-data') {
-      item.command = {
-        command: 'vscode-window-tracker.editProject',
-        title: 'Edit Project',
-        arguments: [element],
-      };
-    }
     item.accessibilityInformation = {
       label: `${title}, ${element.relativeActive}`,
       role: 'treeitem',
