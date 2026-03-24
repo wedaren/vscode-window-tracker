@@ -63,6 +63,8 @@ export type SavedItem = {
  *
  * - `stableId`: 用于去重与持久化的稳定标识符。
  * - `origin`: 表示该节点是来自跟踪（`tracked`）还是用户保存（`saved`）。
+ * - `lastFileChangeMs`: 工作区最近文件变更时间戳（毫秒），来自 git 状态或文件 mtime。
+ * - `recentChangedFiles`: 最近有变更的文件相对路径列表（staged + unstaged）。
  */
 export interface WindowNode extends WindowRecord {
   type: 'window';
@@ -76,4 +78,8 @@ export interface WindowNode extends WindowRecord {
   displayName?: string;
   color?: SavedColor;
   savedItemId?: string;
+  /** 工作区最近文件变更时间戳（毫秒），取 lastCommit 与有变更文件 mtime 的最大值 */
+  lastFileChangeMs?: number;
+  /** staged + unstaged 有变更的文件相对路径列表 */
+  recentChangedFiles?: string[];
 }

@@ -7,6 +7,7 @@ import { WindowNode, WindowRecord, SavedColor, SavedItem } from './types';
 import { buildDedupKeys, toRelativeTime, formatKeybindingLabel } from './helpers';
 import { TrackerService } from './trackerService';
 import { SavedService } from './savedService';
+import { GitService } from './gitService';
 
 /**
  * 管理保存和跟踪窗口记录的核心服务。负责：
@@ -33,6 +34,7 @@ export class DataManager {
   private tracker?: TrackerService;
   private readonly fsImpl: typeof fs = fs;
   private readonly savedSvc: SavedService;
+  private readonly gitSvc: GitService = new GitService();
 
   constructor(private readonly context: vscode.ExtensionContext, options?: { fs?: typeof fs }) {
     this.fsImpl = options?.fs ?? fs;
@@ -277,7 +279,31 @@ export class DataManager {
       }
       return (b.lastActive ?? 0) - (a.lastActive ?? 0);
     });
+
+    // 异步填充每个节点的 git 文件变更信息（不阻塞主流程）
+    await this.enrichNodesWithGitInfo(nodes);
+
     return nodes;
+  }
+
+  /**
+   * @docs enrichNodesWithGitInfo
+   * 为所有有路径的节点异步查询 git 工作区摘要，填充 lastFileChangeMs 与 recentChangedFiles。
+   */
+  private async enrichNodesWithGitInfo(nodes: WindowNode[]): Promise<void> {
+    await Promise.all(
+      nodes.map(async node => {
+        const root = node.dirUri?.fsPath || node.path;
+        if (!root) return;
+        try {
+          const summary = await this.gitSvc.getSummary(root);
+          node.lastFileChangeMs = summary.lastChangeMs;
+          node.recentChangedFiles = summary.changedFiles.map(f => f.relativePath);
+        } catch {
+          // 静默降级
+        }
+      })
+    );
   }
 
   /**
@@ -336,32 +362,64 @@ function getOriginalTitle(node: WindowNode): string {
 
 /**
  * 生成显示在树项右侧的简短描述。
- * 如果节点配置了 keybinding，展示快捷键提示。
+ * 格式：「[改: 文件变更时间 ·] 窗口活跃时间 [· 快捷键]」
  */
 export function buildDescription(node: WindowNode): string {
-  if (node.keybinding) {
-    const kbLabel = formatKeybindingLabel(node.keybinding);
-    return `${node.relativeActive} · ${kbLabel}`;
+  const parts: string[] = [];
+
+  if (typeof node.lastFileChangeMs === 'number') {
+    const fileTime = toRelativeTime(node.lastFileChangeMs);
+    // 只有与窗口活跃时间不同才追加，避免重复
+    if (fileTime !== node.relativeActive) {
+      parts.push(`改: ${fileTime}`);
+    }
   }
-  return `${node.relativeActive}`;
+
+  parts.push(node.relativeActive);
+
+  if (node.keybinding) {
+    parts.push(formatKeybindingLabel(node.keybinding));
+  }
+
+  return parts.join(' · ');
 }
 
 /**
  * 为项构建 Markdown 格式的提示信息。
+ * 展示窗口基本信息、两种时间与 git 有变更文件列表。
  */
 export function buildTooltip(node: WindowNode): vscode.MarkdownString {
   const md = new vscode.MarkdownString(undefined, true);
   md.appendMarkdown(`**${formatTitle(node)}**\n\n`);
-  md.appendMarkdown(`- originalTitle: ${getOriginalTitle(node)}\n`);
-  md.appendMarkdown(`- displayName: ${node.displayName || '-'}\n`);
-  md.appendMarkdown(`- color: ${node.color || '-'}\n`);
+
+  // 时间信息
+  md.appendMarkdown(`---\n\n`);
+  if (node.lastActive) {
+    md.appendMarkdown(`🕐 **窗口活跃**：${toRelativeTime(node.lastActive)} （${new Date(node.lastActive).toLocaleString()}）\n\n`);
+  }
+  if (typeof node.lastFileChangeMs === 'number') {
+    md.appendMarkdown(`✏ **文件变更**：${toRelativeTime(node.lastFileChangeMs)} （${new Date(node.lastFileChangeMs).toLocaleString()}）\n\n`);
+  }
+
+  // git 有变更文件列表
+  if (node.recentChangedFiles && node.recentChangedFiles.length > 0) {
+    md.appendMarkdown(`---\n\n`);
+    md.appendMarkdown(`**未提交变更文件**（staged / unstaged）\n\n`);
+    const display = node.recentChangedFiles.slice(0, 10);
+    for (const f of display) {
+      md.appendMarkdown(`- \`${f}\`\n`);
+    }
+    if (node.recentChangedFiles.length > 10) {
+      md.appendMarkdown(`- *…还有 ${node.recentChangedFiles.length - 10} 个文件*\n`);
+    }
+    md.appendMarkdown(`\n`);
+  }
+
+  // 基本信息
+  md.appendMarkdown(`---\n\n`);
   md.appendMarkdown(`- path: ${node.path || '-'}\n`);
   md.appendMarkdown(`- pid: ${node.pid ?? '-'}\n`);
-  md.appendMarkdown(
-    `- lastActive: ${node.lastActive ? new Date(node.lastActive).toLocaleString() : '-'}\n`
-  );
   md.appendMarkdown(`- source: ${node.source || '-'}\n`);
-  md.appendMarkdown(`- status(raw): ${node.status || '-'}\n`);
   if (node.keybinding) {
     md.appendMarkdown(`- keybinding: \`${node.keybinding}\`\n`);
   }
