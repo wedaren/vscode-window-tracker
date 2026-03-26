@@ -3,7 +3,7 @@
   "displayName": "vscode-window-tracker",
   "publisher": "wedaren",
   "description": "Track and manage VS Code workspace windows efficiently",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "repository": {
     "type": "git",
     "url": "https://github.com/wedaren/vscode-window-tracker"
@@ -138,8 +138,7 @@
         "command": "vscode-window-tracker.openQuickPick",
         "mac": "cmd+j cmd+w",
         "when": "isMac"
-      }
-      ,
+      },
       {
         "command": "vscode-window-tracker.openPrevWindow",
         "mac": "cmd+j cmd+[",
