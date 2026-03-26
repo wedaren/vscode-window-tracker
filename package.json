@@ -113,15 +113,53 @@
         "icon": "$(folder-opened)"
       },
       {
+        "command": "vscode-window-tracker.openNextWindow",
+        "title": "切换到下一个窗口",
+        "icon": "$(chevrons-right)"
+      },
+      {
+        "command": "vscode-window-tracker.openPrevWindow",
+        "title": "切换到上一个窗口",
+        "icon": "$(chevrons-left)"
+      },
+      {
+        "command": "vscode-window-tracker.openQuickPick",
+        "title": "Window tracker（快速选择）",
+        "icon": "$(search)"
+      },
+      {
         "command": "vscode-window-tracker.verifyKeybinding",
         "title": "验证快捷键是否已注册",
         "icon": "$(key)"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "vscode-window-tracker.openQuickPick",
+        "mac": "cmd+j cmd+w",
+        "when": "isMac"
+      }
+      ,
+      {
+        "command": "vscode-window-tracker.openPrevWindow",
+        "mac": "cmd+j cmd+[",
+        "when": "isMac"
+      },
+      {
+        "command": "vscode-window-tracker.openNextWindow",
+        "mac": "cmd+j cmd+]",
+        "when": "isMac"
       }
     ],
     "menus": {
       "view/title": [
         {
           "command": "vscode-window-tracker.refresh",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.openQuickPick",
           "when": "view == vscode-window-tracker.windowsView",
           "group": "navigation"
         },

@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { WindowTreeDataProvider } from './treeProvider';
 import { WindowNode } from './types';
-import { createDataManager, isCurrentWorkspace } from './dataManager';
+import { createDataManager, isCurrentWorkspace, formatTitle, buildDescription, getNodeIcon } from './dataManager';
 import { ConfigService } from './configService';
 import { buildKeybindingSnippet, isKeybindingRegistered, findKeybindingLocation } from './keybindingChecker';
 
@@ -52,6 +52,54 @@ export function activate(context: vscode.ExtensionContext) {
         await provider.addProjectByNode(item);
       }
     ),
+    // 切换到下一个已打开的窗口（只在 tracker 中发现的打开窗口中切换）
+    vscode.commands.registerCommand('vscode-window-tracker.openNextWindow', async () => {
+      const dm = createDataManager(extContext!);
+      const nodes = await dm.getWindowNodes();
+      const openNodes = (nodes || []).filter(n => n.origin === 'tracked' && n.dirUri);
+      if (openNodes.length === 0) return;
+      const currentIndex = openNodes.findIndex(n => isCurrentWorkspace(n.path, n.uri));
+      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % openNodes.length;
+      const target = openNodes[nextIndex];
+      if (!target?.dirUri) {
+        void vscode.window.showWarningMessage('无法切换到下一个窗口，缺少路径信息。');
+        return;
+      }
+      const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
+      if (!allowedSchemes.includes(target.dirUri.scheme)) {
+        const choice = await vscode.window.showWarningMessage(
+          `警告: 该项目试图使用非标准协议 (${target.dirUri.scheme}) 打开路径。是否继续？`,
+          '继续打开',
+          '取消'
+        );
+        if (choice !== '继续打开') return;
+      }
+      await vscode.commands.executeCommand('vscode.openFolder', target.dirUri, true);
+    }),
+    // 切换到上一个已打开的窗口（只在 tracker 中发现的打开窗口中切换）
+    vscode.commands.registerCommand('vscode-window-tracker.openPrevWindow', async () => {
+      const dm = createDataManager(extContext!);
+      const nodes = await dm.getWindowNodes();
+      const openNodes = (nodes || []).filter(n => n.origin === 'tracked' && n.dirUri);
+      if (openNodes.length === 0) return;
+      const currentIndex = openNodes.findIndex(n => isCurrentWorkspace(n.path, n.uri));
+      const prevIndex = currentIndex === -1 ? openNodes.length - 1 : (currentIndex - 1 + openNodes.length) % openNodes.length;
+      const target = openNodes[prevIndex];
+      if (!target?.dirUri) {
+        void vscode.window.showWarningMessage('无法切换到上一个窗口，缺少路径信息。');
+        return;
+      }
+      const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
+      if (!allowedSchemes.includes(target.dirUri.scheme)) {
+        const choice = await vscode.window.showWarningMessage(
+          `警告: 该项目试图使用非标准协议 (${target.dirUri.scheme}) 打开路径。是否继续？`,
+          '继续打开',
+          '取消'
+        );
+        if (choice !== '继续打开') return;
+      }
+      await vscode.commands.executeCommand('vscode.openFolder', target.dirUri, true);
+    }),
     vscode.commands.registerCommand(
       'vscode-window-tracker.editProject',
       async (item?: WindowNode) => {
@@ -167,6 +215,80 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
     )
+    ,
+    // 快速选择并打开窗口
+    vscode.commands.registerCommand('vscode-window-tracker.openQuickPick', async () => {
+      const dm = createDataManager(extContext!);
+      const nodes = await dm.getWindowNodes();
+      if (!nodes || nodes.length === 0) {
+        void vscode.window.showInformationMessage('未找到已跟踪的窗口。');
+        return;
+      }
+
+      const items = nodes.map(n => {
+        // 直接复用 tree view 的 TreeItem，以保证标题和图标完全一致
+        const treeItem = provider.getTreeItem(n);
+        const rawLabel = treeItem.label;
+        const label = typeof rawLabel === 'string' ? rawLabel : (rawLabel && (rawLabel as any).label) || '';
+
+        // 生成要展示的路径：优先使用 dirUri.fsPath，其次 path，再从 uri 解析；去掉尾部可能的 ::none
+        let rawPath: string | undefined;
+        try {
+          rawPath = n.dirUri?.fsPath || n.path || (n.uri ? n.uri : undefined);
+        } catch {
+          rawPath = n.path;
+        }
+        let displayPath = '';
+        if (rawPath) {
+          try {
+            // if it looks like a file:// URI, parse to fsPath to preserve leading slash
+            if (/^file:\/\//.test(rawPath)) {
+              displayPath = vscode.Uri.parse(rawPath).fsPath || '';
+            } else {
+              displayPath = rawPath;
+            }
+          } catch {
+            displayPath = rawPath;
+          }
+        }
+        // remove trailing ::... suffix (such as ::none)
+        displayPath = displayPath.replace(/::.*$/, '').trim();
+        // normalize placeholder values
+        if (!displayPath || displayPath === 'unknown' || displayPath === 'No tracked windows') {
+          displayPath = '';
+        }
+
+        return {
+          label,
+          description: treeItem.description ?? buildDescription(n),
+          // 在 QuickPick 的第二行显示清理后的路径
+          detail: displayPath,
+          // 保留 stableId 以便选中后能定位原始节点
+          stableId: n.stableId,
+          // iconPath 复用 treeItem.iconPath（可能为 ThemeIcon，保留颜色样式）
+          iconPath: treeItem.iconPath as any,
+        } as vscode.QuickPickItem & { iconPath?: any; stableId: string };
+      });
+
+      const picked = await vscode.window.showQuickPick(items, { placeHolder: '选择要打开的窗口' });
+      if (!picked?.stableId) return;
+      const node = nodes.find(n => n.stableId === picked.stableId);
+      if (!node || !node.dirUri) {
+        void vscode.window.showWarningMessage('无法打开所选窗口，缺少路径信息。');
+        return;
+      }
+
+      const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
+      if (!allowedSchemes.includes(node.dirUri.scheme)) {
+        const choice = await vscode.window.showWarningMessage(
+          `警告: 该项目试图使用非标准协议 (${node.dirUri.scheme}) 打开路径。是否继续？`,
+          '继续打开',
+          '取消'
+        );
+        if (choice !== '继续打开') return;
+      }
+      await vscode.commands.executeCommand('vscode.openFolder', node.dirUri, true);
+    })
   );
 
   provider.startHeartbeat(context);
