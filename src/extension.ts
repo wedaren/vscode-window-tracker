@@ -44,6 +44,24 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
+      // 在打开工作区前，启动交互式 zsh 终端并在目标目录执行 `npm run watch`。
+      // 这样可以确保加载用户的 ~/.zshrc（比如 nvm 初始化），使 npm 可用。
+      try {
+        const folderPath = item.dirUri.fsPath;
+        const folderName = path.basename(folderPath) || folderPath;
+        const term = vscode.window.createTerminal({
+          name: `npm: ${folderName}`,
+          shellPath: '/bin/zsh',
+          shellArgs: ['-i'],
+          cwd: folderPath,
+        });
+        term.show(true);
+        // 直接在交互式 shell 中发送命令，允许用户看到过程并中断
+        term.sendText('npm run watch', true);
+      } catch (err) {
+        // 静默失败：继续打开工作区
+      }
+
       await vscode.commands.executeCommand('vscode.openFolder', item.dirUri, true);
     }),
 
