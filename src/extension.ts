@@ -44,20 +44,26 @@ export function activate(context: vscode.ExtensionContext) {
         }
       }
 
-      // 在打开工作区前，启动交互式 zsh 终端并在目标目录执行 `npm run watch`。
-      // 这样可以确保加载用户的 ~/.zshrc（比如 nvm 初始化），使 npm 可用。
+      // 在打开工作区前，确保为该文件夹初始化一个交互式 zsh 终端（-i），
+      // 以便加载用户的 ~/.zshrc（如 nvm），使通过界面打开 vs code 与在终端打开时环境一致。
       try {
         const folderPath = item.dirUri.fsPath;
         const folderName = path.basename(folderPath) || folderPath;
-        const term = vscode.window.createTerminal({
-          name: `npm: ${folderName}`,
-          shellPath: '/bin/zsh',
-          shellArgs: ['-i'],
-          cwd: folderPath,
-        });
-        term.show(true);
-        // 直接在交互式 shell 中发送命令，允许用户看到过程并中断
-        term.sendText('npm run watch', true);
+        const MAP_KEY = 'preprocessed.env.map';
+        const map = (extContext?.workspaceState.get<Record<string, string>>(MAP_KEY) as Record<string, string> | undefined) || {};
+        if (!map[folderPath]) {
+          const termName = `env:init ${folderName} ${Date.now()}`;
+          const term = vscode.window.createTerminal({
+            name: termName,
+            shellPath: '/bin/zsh',
+            shellArgs: ['-i'],
+            cwd: folderPath,
+          });
+          term.show(true);
+          // 不发送任何命令；仅启动交互式 shell 以加载用户环境
+          map[folderPath] = termName;
+          await extContext?.workspaceState.update(MAP_KEY, map);
+        }
       } catch (err) {
         // 静默失败：继续打开工作区
       }
