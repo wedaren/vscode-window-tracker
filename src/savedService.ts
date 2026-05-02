@@ -245,8 +245,10 @@ export class SavedService {
   /**
    * @docs buildSavedNodes
    * 将保存 id 列表转换为供树视图使用的 `WindowNode` 数组。
+   * 每次调用都会重新从磁盘读取 saved.json，确保跨窗口写入后能立即可见。
    */
   public async buildSavedNodes(): Promise<WindowNode[]> {
+    this.loaded = false; // 强制重新读盘，避免其他窗口写入后本窗口缓存失效
     await this.ensureLoaded();
     return this.savedArray.map(savedItem => normalizeSavedCandidate(savedItem));
   }
