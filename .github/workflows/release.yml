@@ -117,3 +117,5 @@ jobs:
             # 如果 token 未配置，跳过发布但不失败（允许流程继续）
             echo "⚠ VSCE_TOKEN not set; skipping marketplace publish"
           fi
+
+          
