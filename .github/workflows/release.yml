@@ -90,7 +90,7 @@ jobs:
 
       # ============ 第10步：创建 GitHub Release ============
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v1 
         with:
           tag_name: v${{ steps.version_bump.outputs.new_version }} # 使用新版本号作为标签
           files: extension.vsix # 上传 VSIX 文件到 release
@@ -118,4 +118,3 @@ jobs:
             echo "⚠ VSCE_TOKEN not set; skipping marketplace publish"
           fi
 
-          

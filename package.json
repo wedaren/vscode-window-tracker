@@ -34,6 +34,10 @@
         {
           "id": "vscode-window-tracker.windowsView",
           "name": "Window Tracker"
+        },
+        {
+          "id": "vscode-window-tracker.editorsView",
+          "name": "Editors"
         }
       ]
     },
@@ -131,6 +135,31 @@
         "command": "vscode-window-tracker.verifyKeybinding",
         "title": "验证快捷键是否已注册",
         "icon": "$(key)"
+      },
+      {
+        "command": "vscode-window-tracker.openEditorsQuickPick",
+        "title": "编辑器标签管理（快速选择）",
+        "icon": "$(list-flat)"
+      },
+      {
+        "command": "vscode-window-tracker.focusEditorTab",
+        "title": "切换到此标签页",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "vscode-window-tracker.closeEditorTab",
+        "title": "关闭标签页",
+        "icon": "$(close)"
+      },
+      {
+        "command": "vscode-window-tracker.closeEditorGroup",
+        "title": "关闭编辑器组",
+        "icon": "$(split-horizontal)"
+      },
+      {
+        "command": "vscode-window-tracker.closeOtherEditorGroups",
+        "title": "关闭其他编辑器组",
+        "icon": "$(window)"
       }
     ],
     "keybindings": [
@@ -138,31 +167,14 @@
         "command": "vscode-window-tracker.openQuickPick",
         "mac": "cmd+j cmd+w",
         "when": "isMac"
+      },
+      {
+        "command": "vscode-window-tracker.openEditorsQuickPick",
+        "mac": "cmd+j cmd+e",
+        "when": "isMac"
       }
     ],
     "menus": {
-      "view/title": [
-        {
-          "command": "vscode-window-tracker.refresh",
-          "when": "view == vscode-window-tracker.windowsView",
-          "group": "navigation"
-        },
-        {
-          "command": "vscode-window-tracker.openQuickPick",
-          "when": "view == vscode-window-tracker.windowsView",
-          "group": "navigation"
-        },
-        {
-          "command": "vscode-window-tracker.addProject",
-          "when": "view == vscode-window-tracker.windowsView",
-          "group": "navigation"
-        },
-        {
-          "command": "vscode-window-tracker.openSavedJson",
-          "when": "view == vscode-window-tracker.windowsView",
-          "group": "navigation"
-        }
-      ],
       "view/item/context": [
         {
           "command": "vscode-window-tracker.reveal",
@@ -193,6 +205,48 @@
           "command": "vscode-window-tracker.verifyKeybinding",
           "when": "viewItem =~ /:kb/ && view == vscode-window-tracker.windowsView",
           "group": "inline@2"
+        },
+        {
+          "command": "vscode-window-tracker.closeEditorTab",
+          "when": "viewItem =~ /^editorTabItem/ && view == vscode-window-tracker.editorsView",
+          "group": "inline@1"
+        },
+        {
+          "command": "vscode-window-tracker.closeEditorGroup",
+          "when": "viewItem =~ /^editorGroupItem/ && view == vscode-window-tracker.editorsView",
+          "group": "inline@1"
+        },
+        {
+          "command": "vscode-window-tracker.closeOtherEditorGroups",
+          "when": "viewItem =~ /^editorGroupItem/ && view == vscode-window-tracker.editorsView",
+          "group": "context@1"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "vscode-window-tracker.refresh",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.openQuickPick",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.addProject",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.openSavedJson",
+          "when": "view == vscode-window-tracker.windowsView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.openEditorsQuickPick",
+          "when": "view == vscode-window-tracker.editorsView",
+          "group": "navigation"
         }
       ]
     }

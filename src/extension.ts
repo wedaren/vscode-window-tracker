@@ -6,6 +6,9 @@ import { WindowNode } from './types';
 import { createDataManager, isCurrentWorkspace, formatTitle } from './dataManager';
 import { ConfigService } from './configService';
 import { buildKeybindingSnippet, isKeybindingRegistered, findKeybindingLocation } from './keybindingChecker';
+import { EditorTracker } from './editorTracker';
+import { openEditorsQuickPick, focusTab } from './editorsQuickPick';
+import { EditorsTreeProvider, EditorTabNode, EditorGroupNode } from './editorsTreeProvider';
 
 let dataManager: ReturnType<typeof createDataManager> | undefined;
 let extContext: vscode.ExtensionContext | undefined;
@@ -370,6 +373,70 @@ export function activate(context: vscode.ExtensionContext) {
 
       qp.show();
     })
+  );
+
+  // ─── Phase 1 & 2：编辑器标签页管理 ───
+  const editorTracker = EditorTracker.getInstance();
+  editorTracker.start(context);
+
+  const editorsProvider = new EditorsTreeProvider(editorTracker, context);
+  vscode.window.createTreeView('vscode-window-tracker.editorsView', {
+    treeDataProvider: editorsProvider,
+    showCollapseAll: false,
+  });
+
+  context.subscriptions.push(
+    // Phase 1：QuickPick 主入口（cmd+j cmd+e）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.openEditorsQuickPick',
+      () => openEditorsQuickPick(editorTracker)
+    ),
+
+    // Phase 2：切换到指定标签页（由 TreeView 节点 command 触发）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.focusEditorTab',
+      async (node?: EditorTabNode) => {
+        if (!node?.tab) return;
+        await focusTab(node.tab);
+      }
+    ),
+
+    // Phase 2：关闭指定标签页（TreeView 上下文菜单 / 行内按钮）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.closeEditorTab',
+      async (node?: EditorTabNode) => {
+        if (!node?.tab) return;
+        await vscode.window.tabGroups.close(node.tab);
+      }
+    ),
+
+    // Phase 2：关闭指定编辑器组（TreeView 上下文菜单）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.closeEditorGroup',
+      async (node?: EditorGroupNode) => {
+        if (!node) return;
+        const group = vscode.window.tabGroups.all.find(
+          g => g.viewColumn === node.viewColumn
+        );
+        if (group) {
+          await vscode.window.tabGroups.close(group);
+        }
+      }
+    ),
+
+    // Phase 2：关闭其他所有编辑器组（TreeView 上下文菜单）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.closeOtherEditorGroups',
+      async (node?: EditorGroupNode) => {
+        if (!node) return;
+        const otherGroups = vscode.window.tabGroups.all.filter(
+          g => g.viewColumn !== node.viewColumn
+        );
+        if (otherGroups.length > 0) {
+          await vscode.window.tabGroups.close(otherGroups);
+        }
+      }
+    )
   );
 
   provider.startHeartbeat(context);
