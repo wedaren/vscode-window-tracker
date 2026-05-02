@@ -1,92 +1,110 @@
 # vscode-window-tracker
 
-一个在 VS Code 侧边栏以 Tree View 形式展示并管理本地 VS Code 窗口/工作区快照的扩展。
+同时打开十余个 VS Code 窗口执行不同任务？用这个扩展快速定位、切换并管理所有工作区窗口。
 
-**目标用户**：希望可视化、快速定位并管理本地已打开或历史工作区窗口的开发者。
-
-**核心能力（用户视角）**
-
-- 在侧边栏展示 `Window Tracker` 视图，用于列出当前/历史会话的窗口快照。
-- 可区分“聚焦（focused）”和“可见（visible）”状态：聚焦项以强调色显示，其他项使用中性图标。
-- 列表项右侧显示短路径与相对时间（如 now / 5m / 2h / 1d），Tooltip 提供完整元数据（标题、路径、进程 ID、最近激活时间、来源、状态等）。
-- 支持常用命令：刷新视图、在新窗口中打开所选目录、将文件夹加入“已添加项目”、从“已添加项目”中移除。
-
-**快速上手**
-
-1. 打开侧边栏，找到“Window Tracker”视图（可在活动栏或“视图”菜单中显示）。
-2. 列表会显示当前会话及从本机 tracker 存储合并的历史快照。
-3. 右键/点击可调出上下文菜单或使用命令面板调用相关命令（见下文）。
-
-**主要交互与命令**
-
-- 刷新视图：命令面板输入 `Window Tracker: Refresh`（命令 id: `vscode-window-tracker.refresh`）。
-- 在新窗口中打开目录：选择某项，使用 `Window Tracker: Reveal`（命令 id: `vscode-window-tracker.reveal`），将在新 VS Code 窗口中打开对应目录。
-- 添加已管理项目：使用 `Window Tracker: Add Project`（命令 id: `vscode-window-tracker.addProject`），可通过选择文件夹或手动输入路径将项目加入“已添加项目”列表，便于固定显示与快速访问。
-- 移除已添加项目：使用 `Window Tracker: Remove Project`（命令 id: `vscode-window-tracker.removeProject`）。
-
-在命令面板里输入 `Window Tracker` 可快速查看和执行以上命令。
-
-**视图与视觉提示**
-
-- 聚焦（focused）：以主题强调色或高亮图标显示，表示当前处于前台的 VS Code 窗口/工作区。
-- 可见（visible）：使用中性图标，表示该窗口在系统层面仍可见但未被聚焦。
-- 列表项描述：短路径 + 相对时间，用于快速判断最近活动和位置；悬浮提示（Tooltip）显示详细信息供审阅。
-
-**数据存储与行为（对用户可见的重要点）**
-
-- 本扩展在本地目录下维护会话快照（默认位置：`~/.vscode-window-tracker`），每次激活会写入当前会话的 tracker 文件。
-- 为保证展示合理性，扩展会合并当前会话与该目录下的历史 JSON 文件，并对重复项进行去重（按窗口标识 / 进程标识 / 标题等优先信息保留最近活动记录）。
-- 扩展会定期写入心跳以更新时间戳（使用 `vscode-window-tracker.heartbeatIntervalSeconds` 配置，默认 5 秒），并可在激活时清理过期的 tracker 文件（可配置自动清理策略）。
-
-**配置（可在扩展设置中查看与调整）**
-
-- `vscode-window-tracker.heartbeatIntervalSeconds`：心跳写入间隔（秒），用于更新最近活动时间；默认 5 秒。
-- `vscode-window-tracker.trackerAutoCleanup`：是否在激活时自动清理过期 tracker 文件（可在设置中启用/禁用）。
-- `vscode-window-tracker.trackerFileStaleMinutes`：判定 tracker 文件为过期的时间阈值（以分钟计）。
-
-（备注：更多配置项可通过 VS Code 设置界面搜索 “Window Tracker” 查看）
-
-**常见场景示例**
-
-- 快速切换到历史工作区：在 `Window Tracker` 列表中找到目标项，使用 `Reveal` 在新窗口中打开该目录。
-- 固定常用项目：用 `Add Project` 将某些目录加入“已添加项目”，它们会在视图中优先显示，便于长期管理。
-- 点击任意项目：会弹出 Quick Pick，可直接设置展示名与基础颜色；展示名会以“展示名（原名）”形式显示。
-
-**saved.json 自定义示例**
-
-```json
-[
-	{
-		"id": "/Users/name/workspace/demo-app",
-		"displayName": "演示项目",
-		"color": "blue"
-	},
-	{
-		"id": "/Users/name/workspace/admin-console",
-		"displayName": "后台",
-		"color": "orange"
-	}
-]
-```
-
-- `id`：项目路径或可解析 URI。
-- `displayName`：可选，配置后显示为“展示名（原名）”。
-- `color`：可选，支持 `blue`、`green`、`yellow`、`orange`、`red`、`pink`、`purple`、`cyan`、`gray`，用于节点图标标识。
-
-**故障排查**
-
-- 未显示任何窗口：尝试使用 `Window Tracker: Refresh` 强制刷新。
-- 列表数据不一致或缺失：检查主机上 `~/.vscode-window-tracker` 目录是否存在与可读；确保 VS Code 有权限写入你的主目录。
-- 清理旧记录：可通过设置关闭/调整自动清理策略，或直接删除 `~/.vscode-window-tracker` 下的旧文件来手动清理。
-
-**隐私与安全**
-
-- 扩展仅在本地保存会话快照（JSON 格式），不向网络发送或同步这些数据。请妥善保管你的主目录权限；如需更严格控制，请在设置中禁用自动写入或定期清理数据目录。
-
-**更多帮助**
-
-- 如果需要功能建议或遇到问题，请在扩展页面中查看支持信息或打开 issue（扩展仓库/市场页提供的渠道）。
+**核心入口**：`cmd+j cmd+w`（macOS）打开 QuickPick，模糊搜索 + 键盘直接跳转目标窗口。
 
 ---
 
-更新于：2026-02-27
+## 功能概览
+
+### QuickPick 窗口切换（`cmd+j cmd+w`）
+
+- **模糊搜索**：同时匹配项目名、路径、相对时间与变更文件数，十余窗口秒级定位
+- **自动添加当前窗口**：若当前工作区尚未保存，列表顶部显示 `+ 添加当前窗口`，回车一键加入
+- **当前窗口直接重命名**：选中当前窗口条目后回车，立即弹出重命名框，无需额外步骤
+- **置顶按钮**：每个已保存项右侧显示 pin 按钮，点击即切换置顶状态，列表实时刷新
+- **智能排序**：置顶 → 最近使用 → 使用频率 → 有展示名优先
+- **丰富展示**：图标区分当前/置顶/已保存/普通，描述包含相对时间与未提交变更数，详情显示路径末尾两段
+
+### 侧边栏 Tree View
+
+- 展示所有当前/历史工作区快照，区分 `focused` / `idle` 状态
+- 右键菜单：打开、编辑（展示名 + 颜色 + 置顶）、添加/移除保存、关闭窗口
+- 悬浮提示（Tooltip）：完整元数据 + 最近 git 变更文件列表
+
+### 已保存项目（saved.json）
+
+- 持久化保存常用工作区，跨会话保留展示名、颜色标记、置顶状态、使用次数
+- 文件位置：`~/.vscode-window-tracker/saved.json`，可直接编辑
+- 命令：`Window Tracker: Open saved.json` 快速打开文件
+
+---
+
+## 快速上手
+
+1. 打开侧边栏，找到 **Window Tracker** 视图（活动栏 or 视图菜单）
+2. 按 `cmd+j cmd+w` 打开 QuickPick，输入关键字定位窗口，回车跳转
+3. 对要固定的项目：点击条目右侧 pin 图标置顶，或通过树视图右键 → 编辑 配置展示名与颜色
+
+---
+
+## 命令
+
+| 命令 | 说明 |
+|---|---|
+| `Window Tracker: Open QuickPick` | 打开窗口快速选择（`cmd+j cmd+w`） |
+| `Window Tracker: Refresh` | 强制刷新视图 |
+| `Window Tracker: Reveal` | 在新窗口中打开所选目录 |
+| `Window Tracker: Add Project` | 添加文件夹到已保存列表 |
+| `Window Tracker: Remove Project` | 从已保存列表移除 |
+| `Window Tracker: Edit Project` | 编辑展示名、颜色、置顶状态 |
+| `Window Tracker: Open saved.json` | 直接打开 saved.json 文件 |
+| `Window Tracker: Open Project by ID` | 通过 stableId 跳转（可绑自定义快捷键） |
+
+---
+
+## 配置
+
+| 配置项 | 默认值 | 说明 |
+|---|---|---|
+| `vscode-window-tracker.trackerDir` | `~/.vscode-window-tracker` | tracker 文件目录 |
+| `vscode-window-tracker.heartbeatIntervalSeconds` | `5` | 心跳写入间隔（秒） |
+| `vscode-window-tracker.trackerFileStaleMinutes` | `30` | tracker 文件过期阈值（分钟） |
+| `vscode-window-tracker.trackerAutoCleanup` | `true` | 激活时自动清理过期文件 |
+| `vscode-window-tracker.idleThresholdMinutes` | `30` | 超过多少分钟无活动视为 idle |
+
+---
+
+## saved.json 格式
+
+```json
+[
+  {
+    "id": "/Users/name/workspace/demo-app",
+    "displayName": "演示项目",
+    "color": "blue",
+    "pinned": true
+  },
+  {
+    "id": "/Users/name/workspace/admin-console",
+    "displayName": "后台",
+    "color": "orange"
+  }
+]
+```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `id` | string | 项目路径或可解析 URI（必填） |
+| `displayName` | string | 展示名，配置后显示为"展示名（原名）" |
+| `color` | string | 图标颜色：`blue` `green` `yellow` `orange` `red` `pink` `purple` `cyan` `gray` |
+| `pinned` | boolean | 是否置顶（排序最优先） |
+| `openCount` | number | 通过 QuickPick 打开的累计次数（用于频率排序，自动维护） |
+| `keybinding` | string | 为该项绑定的自定义快捷键（配合 `openByStableId` 命令） |
+| `lastActive` | number | 最近活跃时间戳（毫秒），自动维护 |
+
+---
+
+## 隐私与安全
+
+扩展仅在本地保存会话快照（JSON 格式），不向网络发送或同步任何数据。
+
+---
+
+## 故障排查
+
+- **未显示任何窗口**：使用 `Window Tracker: Refresh` 强制刷新
+- **列表数据不一致**：检查 `~/.vscode-window-tracker` 目录是否存在且可读
+- **重命名不生效**：确认通过 QuickPick 选中当前窗口条目后按回车，而非点击其他按钮
+- **清理旧记录**：调整 `trackerFileStaleMinutes` 配置，或直接删除 `~/.vscode-window-tracker` 下的旧文件

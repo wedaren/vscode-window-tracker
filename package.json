@@ -138,16 +138,6 @@
         "command": "vscode-window-tracker.openQuickPick",
         "mac": "cmd+j cmd+w",
         "when": "isMac"
-      },
-      {
-        "command": "vscode-window-tracker.openPrevWindow",
-        "mac": "cmd+j cmd+[",
-        "when": "isMac"
-      },
-      {
-        "command": "vscode-window-tracker.openNextWindow",
-        "mac": "cmd+j cmd+]",
-        "when": "isMac"
       }
     ],
     "menus": {

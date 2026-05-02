@@ -17,7 +17,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private nodes: WindowNode[] = [];
-  private dataManager: ReturnType<typeof createDataManager>;
+  public readonly dataManager: ReturnType<typeof createDataManager>;
   private lastHash = '';
 
   constructor(private readonly context: vscode.ExtensionContext) {
@@ -70,7 +70,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
 
   /**
    * @docs editProjectByNode
-   * 点击树节点后按步骤编辑展示名和基础颜色。
+   * 点击树节点后按步骤编辑展示名、基础颜色与置顶状态。
    */
   public async editProjectByNode(node?: WindowNode): Promise<void> {
     if (!node || node.stableId === 'placeholder-no-data') {
@@ -97,10 +97,27 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
       return;
     }
 
+    // 第三步：置顶状态（仅已保存项支持）
+    let pinned: boolean | undefined = node.pinned;
+    if (node.isSaved || node.origin === 'saved') {
+      const pinnedPick = await vscode.window.showQuickPick(
+        [
+          { label: node.pinned ? '$(pinned) 已置顶（点击取消）' : '$(pin) 置顶', value: !node.pinned },
+          { label: '$(close) 保持不变', value: node.pinned ?? false },
+        ],
+        { title: '第三步：设置置顶状态', placeHolder: '置顶后将排在列表最前方', ignoreFocusOut: true }
+      );
+      if (pinnedPick === undefined) return;
+      pinned = pinnedPick.value;
+    }
+
     await this.dataManager.upsertSavedMetadata(savedId, {
       displayName: displayName.trim() || undefined,
       color,
     });
+    if ((node.isSaved || node.origin === 'saved') && pinned !== undefined) {
+      await this.dataManager.togglePinnedTo(savedId, pinned);
+    }
     void this.refresh(true);
   }
 

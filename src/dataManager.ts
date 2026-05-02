@@ -164,6 +164,30 @@ export class DataManager {
   }
 
   /**
+   * @docs togglePinned
+   * 切换指定 id 的置顶状态并持久化；返回新的置顶状态。
+   */
+  public async togglePinned(id: string): Promise<boolean> {
+    return this.savedSvc.togglePinned(id);
+  }
+
+  /**
+   * @docs togglePinnedTo
+   * 将指定 id 的置顶状态设置为给定值并持久化。
+   */
+  public async togglePinnedTo(id: string, pinned: boolean): Promise<void> {
+    await this.savedSvc.setPinned(id, pinned);
+  }
+
+  /**
+   * @docs incrementOpenCount
+   * 将指定保存项的使用次数加一并持久化。
+   */
+  public async incrementOpenCount(id: string): Promise<void> {
+    await this.savedSvc.incrementOpenCount(id);
+  }
+
+  /**
    * @docs removeSaved
    * 从保存集合移除给定 `fsPath` 并持久化。
    */
@@ -258,6 +282,8 @@ export class DataManager {
         t.displayName = a.displayName;
         t.color = a.color;
         t.savedItemId = a.savedItemId || a.stableId;
+        t.pinned = a.pinned;
+        t.openCount = a.openCount;
         if (
           t.status === 'focused' &&
           typeof t.lastActive === 'number' &&
@@ -274,10 +300,17 @@ export class DataManager {
       await this.savedSvc.updateLastActiveBatch(savedLastActiveUpdates);
     }
     const nodes = [...trackedNodes, ...addedNodes].sort((a, b) => {
-      if (a.origin !== b.origin) {
-        return a.origin === 'tracked' ? -1 : 1;
-      }
-      return (b.lastActive ?? 0) - (a.lastActive ?? 0);
+      // 排序优先级：置顶(pinned) > 最近使用(lastActive) > 使用频率(openCount) > 重命名优先(displayName)
+      const aPinned = a.pinned ? 1 : 0;
+      const bPinned = b.pinned ? 1 : 0;
+      if (bPinned !== aPinned) return bPinned - aPinned;
+      const lastActiveDiff = (b.lastActive ?? 0) - (a.lastActive ?? 0);
+      if (lastActiveDiff !== 0) return lastActiveDiff;
+      const openCountDiff = (b.openCount ?? 0) - (a.openCount ?? 0);
+      if (openCountDiff !== 0) return openCountDiff;
+      const aRenamed = a.displayName ? 1 : 0;
+      const bRenamed = b.displayName ? 1 : 0;
+      return bRenamed - aRenamed;
     });
 
     // 异步填充每个节点的 git 文件变更信息（不阻塞主流程）

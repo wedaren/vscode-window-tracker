@@ -76,6 +76,11 @@ export function normalizeSavedItem(raw: unknown): SavedItem | undefined {
     typeof candidate.keybinding === 'string' && candidate.keybinding.trim() !== ''
       ? candidate.keybinding.trim()
       : undefined;
+  const pinned = candidate.pinned === true ? true : undefined;
+  const openCount =
+    typeof candidate.openCount === 'number' && Number.isInteger(candidate.openCount) && candidate.openCount >= 0
+      ? candidate.openCount
+      : undefined;
 
   return {
     id: candidate.id,
@@ -83,6 +88,8 @@ export function normalizeSavedItem(raw: unknown): SavedItem | undefined {
     keybinding,
     displayName,
     color,
+    pinned,
+    openCount,
   };
 }
 
@@ -131,6 +138,8 @@ export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
       displayName: saved.displayName,
       color: saved.color,
       savedItemId: saved.id,
+      pinned: saved.pinned,
+      openCount: saved.openCount,
     };
   } catch {
     return {
@@ -151,6 +160,8 @@ export function normalizeSavedCandidate(saved: SavedItem): WindowNode {
       displayName: saved.displayName,
       color: saved.color,
       savedItemId: saved.id,
+      pinned: saved.pinned,
+      openCount: saved.openCount,
     };
   }
 }

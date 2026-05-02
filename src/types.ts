@@ -48,6 +48,8 @@ export type SavedColor = (typeof SAVED_COLORS)[number];
  * 表示保存列表中的条目，兼容旧格式（string id）和新格式（object）。
  *
  * - `keybinding`: 用户在 saved.json 中自定义的快捷键字符串（例如 `"cmd+j cmd+k"`）。
+ * - `pinned`: 若为 true，则在 QuickPick 与树视图中置顶显示。
+ * - `openCount`: 通过 QuickPick 打开该窗口的累计次数，用于使用频率排序。
  */
 export type SavedItem = {
   id: string;
@@ -55,6 +57,8 @@ export type SavedItem = {
   keybinding?: string;
   displayName?: string;
   color?: SavedColor;
+  pinned?: boolean;
+  openCount?: number;
 };
 
 /**
@@ -82,4 +86,8 @@ export interface WindowNode extends WindowRecord {
   lastFileChangeMs?: number;
   /** staged + unstaged 有变更的文件相对路径列表 */
   recentChangedFiles?: string[];
+  /** 若为 true，则在 QuickPick 与树视图中置顶显示（独立于 isSaved） */
+  pinned?: boolean;
+  /** 通过 QuickPick 打开该窗口的累计次数，用于使用频率排序 */
+  openCount?: number;
 }

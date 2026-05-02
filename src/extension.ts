@@ -3,7 +3,7 @@ import * as path from 'path';
 import * as fs from 'fs/promises';
 import { WindowTreeDataProvider } from './treeProvider';
 import { WindowNode } from './types';
-import { createDataManager, isCurrentWorkspace, formatTitle, buildDescription, getNodeIcon } from './dataManager';
+import { createDataManager, isCurrentWorkspace, formatTitle } from './dataManager';
 import { ConfigService } from './configService';
 import { buildKeybindingSnippet, isKeybindingRegistered, findKeybindingLocation } from './keybindingChecker';
 
@@ -76,54 +76,6 @@ export function activate(context: vscode.ExtensionContext) {
         await provider.addProjectByNode(item);
       }
     ),
-    // 切换到下一个已打开的窗口（只在 tracker 中发现的打开窗口中切换）
-    vscode.commands.registerCommand('vscode-window-tracker.openNextWindow', async () => {
-      const dm = createDataManager(extContext!);
-      const nodes = await dm.getWindowNodes();
-      const openNodes = (nodes || []).filter(n => n.origin === 'tracked' && n.dirUri);
-      if (openNodes.length === 0) return;
-      const currentIndex = openNodes.findIndex(n => isCurrentWorkspace(n.path, n.uri));
-      const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % openNodes.length;
-      const target = openNodes[nextIndex];
-      if (!target?.dirUri) {
-        void vscode.window.showWarningMessage('无法切换到下一个窗口，缺少路径信息。');
-        return;
-      }
-      const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
-      if (!allowedSchemes.includes(target.dirUri.scheme)) {
-        const choice = await vscode.window.showWarningMessage(
-          `警告: 该项目试图使用非标准协议 (${target.dirUri.scheme}) 打开路径。是否继续？`,
-          '继续打开',
-          '取消'
-        );
-        if (choice !== '继续打开') return;
-      }
-      await vscode.commands.executeCommand('vscode.openFolder', target.dirUri, true);
-    }),
-    // 切换到上一个已打开的窗口（只在 tracker 中发现的打开窗口中切换）
-    vscode.commands.registerCommand('vscode-window-tracker.openPrevWindow', async () => {
-      const dm = createDataManager(extContext!);
-      const nodes = await dm.getWindowNodes();
-      const openNodes = (nodes || []).filter(n => n.origin === 'tracked' && n.dirUri);
-      if (openNodes.length === 0) return;
-      const currentIndex = openNodes.findIndex(n => isCurrentWorkspace(n.path, n.uri));
-      const prevIndex = currentIndex === -1 ? openNodes.length - 1 : (currentIndex - 1 + openNodes.length) % openNodes.length;
-      const target = openNodes[prevIndex];
-      if (!target?.dirUri) {
-        void vscode.window.showWarningMessage('无法切换到上一个窗口，缺少路径信息。');
-        return;
-      }
-      const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
-      if (!allowedSchemes.includes(target.dirUri.scheme)) {
-        const choice = await vscode.window.showWarningMessage(
-          `警告: 该项目试图使用非标准协议 (${target.dirUri.scheme}) 打开路径。是否继续？`,
-          '继续打开',
-          '取消'
-        );
-        if (choice !== '继续打开') return;
-      }
-      await vscode.commands.executeCommand('vscode.openFolder', target.dirUri, true);
-    }),
     vscode.commands.registerCommand(
       'vscode-window-tracker.editProject',
       async (item?: WindowNode) => {
@@ -240,78 +192,183 @@ export function activate(context: vscode.ExtensionContext) {
       }
     )
     ,
-    // 快速选择并打开窗口
+    // 快速选择并打开窗口（cmd+j cmd+w）
     vscode.commands.registerCommand('vscode-window-tracker.openQuickPick', async () => {
-      const dm = createDataManager(extContext!);
+      const dm = provider.dataManager;
       const nodes = await dm.getWindowNodes();
-      if (!nodes || nodes.length === 0) {
-        void vscode.window.showInformationMessage('未找到已跟踪的窗口。');
-        return;
+
+      /** 取路径末尾两段，例如 /a/b/c/d → c/d */
+      function toLastTwoSegments(p: string): string {
+        if (!p) return '';
+        const parts = p.replace(/\\/g, '/').split('/').filter(Boolean);
+        return parts.length >= 2 ? parts.slice(-2).join('/') : parts.join('/') || p;
       }
 
-      const items = nodes.map(n => {
-        // 直接复用 tree view 的 TreeItem，以保证标题和图标完全一致
-        const treeItem = provider.getTreeItem(n);
-        const rawLabel = treeItem.label;
-        const label = typeof rawLabel === 'string' ? rawLabel : (rawLabel && (rawLabel as any).label) || '';
-
-        // 生成要展示的路径：优先使用 dirUri.fsPath，其次 path，再从 uri 解析；去掉尾部可能的 ::none
-        let rawPath: string | undefined;
-        try {
-          rawPath = n.dirUri?.fsPath || n.path || (n.uri ? n.uri : undefined);
-        } catch {
-          rawPath = n.path;
+      /** 安全打开文件夹，遇到非标准 scheme 时弹确认框 */
+      async function safeOpenFolder(uri: vscode.Uri): Promise<boolean> {
+        const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
+        if (!allowedSchemes.includes(uri.scheme)) {
+          const choice = await vscode.window.showWarningMessage(
+            `警告: 非标准协议 (${uri.scheme})，是否继续？`,
+            '继续打开',
+            '取消'
+          );
+          if (choice !== '继续打开') return false;
         }
-        let displayPath = '';
-        if (rawPath) {
-          try {
-            // if it looks like a file:// URI, parse to fsPath to preserve leading slash
-            if (/^file:\/\//.test(rawPath)) {
-              displayPath = vscode.Uri.parse(rawPath).fsPath || '';
-            } else {
-              displayPath = rawPath;
-            }
-          } catch {
-            displayPath = rawPath;
+        await vscode.commands.executeCommand('vscode.openFolder', uri, true);
+        return true;
+      }
+
+      interface WindowQuickPickItem extends vscode.QuickPickItem {
+        _kind: 'add-current' | 'window';
+        stableId?: string;
+        nodeRef?: WindowNode;
+        isCurrent?: boolean;
+        savedId?: string;
+      }
+
+      const currentFolderPath = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath;
+      const isCurrentInList = nodes.some(n => isCurrentWorkspace(n.path, n.uri));
+
+      function buildItems(): WindowQuickPickItem[] {
+        const result: WindowQuickPickItem[] = [];
+
+        // 当前窗口不在列表时，置顶显示"添加"项
+        if (!isCurrentInList && currentFolderPath) {
+          result.push({
+            _kind: 'add-current',
+            label: '$(add) 添加当前窗口',
+            description: path.basename(currentFolderPath),
+            detail: toLastTwoSegments(currentFolderPath),
+            alwaysShow: true,
+          });
+        }
+
+        for (const n of nodes) {
+          const isCurrent = isCurrentWorkspace(n.path, n.uri);
+          const title = formatTitle(n);
+
+          // 图标前缀：当前 > 置顶 > 已保存 > 普通
+          let iconPrefix: string;
+          if (isCurrent) iconPrefix = '$(record) ';
+          else if (n.pinned) iconPrefix = '$(pin) ';
+          else if (n.isSaved) iconPrefix = '$(star-full) ';
+          else iconPrefix = '$(repo) ';
+
+          // description：[当前] · 相对时间 [· N 变更]
+          const descParts: string[] = [];
+          if (isCurrent) descParts.push('[当前]');
+          descParts.push(n.relativeActive);
+          if (n.recentChangedFiles && n.recentChangedFiles.length > 0) {
+            descParts.push(`$(diff) ${n.recentChangedFiles.length} 变更`);
           }
-        }
-        // remove trailing ::... suffix (such as ::none)
-        displayPath = displayPath.replace(/::.*$/, '').trim();
-        // normalize placeholder values
-        if (!displayPath || displayPath === 'unknown' || displayPath === 'No tracked windows') {
-          displayPath = '';
+
+          // detail：路径末尾两段（简洁展示，便于扫视）
+          const rawPath = n.dirUri?.fsPath || n.path || '';
+          const detail = toLastTwoSegments(rawPath);
+
+          // 已保存项可通过按钮切换置顶
+          const buttons: vscode.QuickInputButton[] = n.isSaved
+            ? [{
+                iconPath: new vscode.ThemeIcon(n.pinned ? 'pinned' : 'pin'),
+                tooltip: n.pinned ? '取消置顶' : '置顶',
+              }]
+            : [];
+
+          result.push({
+            _kind: 'window',
+            label: `${iconPrefix}${title}`,
+            description: descParts.join(' · '),
+            detail,
+            stableId: n.stableId,
+            nodeRef: n,
+            isCurrent,
+            savedId: n.savedItemId || n.stableId,
+            buttons,
+          });
         }
 
-        return {
-          label,
-          description: treeItem.description ?? buildDescription(n),
-          // 在 QuickPick 的第二行显示清理后的路径
-          detail: displayPath,
-          // 保留 stableId 以便选中后能定位原始节点
-          stableId: n.stableId,
-          // iconPath 复用 treeItem.iconPath（可能为 ThemeIcon，保留颜色样式）
-          iconPath: treeItem.iconPath as any,
-        } as vscode.QuickPickItem & { iconPath?: any; stableId: string };
-      });
-
-      const picked = await vscode.window.showQuickPick(items, { placeHolder: '选择要打开的窗口' });
-      if (!picked?.stableId) return;
-      const node = nodes.find(n => n.stableId === picked.stableId);
-      if (!node || !node.dirUri) {
-        void vscode.window.showWarningMessage('无法打开所选窗口，缺少路径信息。');
-        return;
+        return result;
       }
 
-      const allowedSchemes = ['file', 'vscode-vfs', 'vscode-test-web', 'vscode-remote'];
-      if (!allowedSchemes.includes(node.dirUri.scheme)) {
-        const choice = await vscode.window.showWarningMessage(
-          `警告: 该项目试图使用非标准协议 (${node.dirUri.scheme}) 打开路径。是否继续？`,
-          '继续打开',
-          '取消'
-        );
-        if (choice !== '继续打开') return;
-      }
-      await vscode.commands.executeCommand('vscode.openFolder', node.dirUri, true);
+      const qp = vscode.window.createQuickPick<WindowQuickPickItem>();
+      qp.placeholder = '输入名称快速定位窗口 · Enter 打开 · 当前窗口 Enter 重命名';
+      qp.matchOnDescription = true;
+      qp.matchOnDetail = true;
+      qp.items = buildItems();
+
+      const disposables: vscode.Disposable[] = [];
+
+      // 点击条目上的置顶按钮
+      disposables.push(
+        qp.onDidTriggerItemButton(async event => {
+          const item = event.item;
+          if (item._kind !== 'window' || !item.savedId) return;
+          const newPinned = await dm.togglePinned(item.savedId);
+          const updated = await dm.getWindowNodes();
+          nodes.length = 0;
+          nodes.push(...updated);
+          qp.items = buildItems();
+          const name = item.nodeRef ? formatTitle(item.nodeRef) : item.savedId;
+          void vscode.window.showInformationMessage(newPinned ? `已置顶：${name}` : `已取消置顶：${name}`);
+        }),
+
+        // 确认选择
+        qp.onDidAccept(async () => {
+          const picked = qp.selectedItems[0];
+          if (!picked) return;
+
+          // 快速添加当前窗口
+          if (picked._kind === 'add-current') {
+            qp.hide();
+            if (currentFolderPath) {
+              await dm.save(currentFolderPath);
+              await provider.refresh(true);
+            }
+            return;
+          }
+
+          const node = picked.nodeRef;
+          if (!node) return;
+
+          // 当前窗口 → 直接重命名
+          if (picked.isCurrent) {
+            qp.hide();
+            const savedId = node.savedItemId || node.stableId;
+            const newName = await vscode.window.showInputBox({
+              title: `重命名当前窗口：${formatTitle(node)}`,
+              prompt: '输入新展示名，留空表示清除',
+              value: node.displayName ?? '',
+              ignoreFocusOut: true,
+            });
+            if (newName === undefined) return;
+            await dm.upsertSavedMetadata(savedId, {
+              displayName: newName.trim() || undefined,
+              color: node.color,
+            });
+            await provider.refresh(true);
+            return;
+          }
+
+          // 其他窗口 → 打开 + 累加使用次数
+          qp.hide();
+          if (!node.dirUri) {
+            void vscode.window.showWarningMessage('无法打开所选窗口，缺少路径信息。');
+            return;
+          }
+          const opened = await safeOpenFolder(node.dirUri);
+          if (opened && node.savedItemId) {
+            await dm.incrementOpenCount(node.savedItemId);
+          }
+        }),
+
+        qp.onDidHide(() => {
+          disposables.forEach(d => d.dispose());
+          qp.dispose();
+        })
+      );
+
+      qp.show();
     })
   );
 

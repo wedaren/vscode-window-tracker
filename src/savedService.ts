@@ -71,6 +71,8 @@ export class SavedService {
       keybinding: item.keybinding,
       displayName: item.displayName,
       color: item.color,
+      pinned: item.pinned,
+      openCount: item.openCount,
     }));
     this.savedSet = new Set(this.savedArray.map(s => s.id));
     this.loaded = true;
@@ -173,6 +175,8 @@ export class SavedService {
         lastActive: now,
         displayName: metadata.displayName,
         color: metadata.color,
+        pinned: item.pinned,
+        openCount: item.openCount,
       };
     });
     if (!found) {
@@ -193,6 +197,49 @@ export class SavedService {
    */
   public getAllSaved(): string[] {
     return [...this.savedSet];
+  }
+
+  /**
+   * @docs setPinned
+   * 设置指定 id 的置顶状态并持久化。
+   */
+  public async setPinned(id: string, pinned: boolean): Promise<void> {
+    await this.ensureLoaded();
+    this.savedArray = this.savedArray.map(item =>
+      item.id === id ? { ...item, pinned: pinned || undefined } : item
+    );
+    await this.persistSavedArray(this.savedArray);
+  }
+
+  /**
+   * @docs togglePinned
+   * 切换指定 id 的置顶状态并持久化；返回新的置顶状态。
+   */
+  public async togglePinned(id: string): Promise<boolean> {
+    await this.ensureLoaded();
+    const current = this.savedArray.find(i => i.id === id);
+    const newPinned = !(current?.pinned ?? false);
+    this.savedArray = this.savedArray.map(item =>
+      item.id === id ? { ...item, pinned: newPinned || undefined } : item
+    );
+    await this.persistSavedArray(this.savedArray);
+    return newPinned;
+  }
+
+  /**
+   * @docs incrementOpenCount
+   * 将指定 id 的 openCount 加一并持久化。
+   */
+  public async incrementOpenCount(id: string): Promise<void> {
+    await this.ensureLoaded();
+    let found = false;
+    this.savedArray = this.savedArray.map(item => {
+      if (item.id !== id) return item;
+      found = true;
+      return { ...item, openCount: (item.openCount ?? 0) + 1 };
+    });
+    if (!found) return;
+    await this.persistSavedArray(this.savedArray);
   }
 
   /**
