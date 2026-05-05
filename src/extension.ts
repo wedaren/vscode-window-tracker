@@ -8,7 +8,10 @@ import { ConfigService } from './configService';
 import { buildKeybindingSnippet, isKeybindingRegistered, findKeybindingLocation } from './keybindingChecker';
 import { EditorTracker } from './editorTracker';
 import { openEditorsQuickPick, focusTab } from './editorsQuickPick';
+import { openGitBranchQuickPick } from './gitBranchQuickPick';
 import { EditorsTreeProvider, EditorTabNode, EditorGroupNode } from './editorsTreeProvider';
+import { GitBranchTreeProvider, BranchItemNode } from './gitBranchTreeProvider';
+import { GitService } from './gitService';
 
 let dataManager: ReturnType<typeof createDataManager> | undefined;
 let extContext: vscode.ExtensionContext | undefined;
@@ -196,6 +199,10 @@ export function activate(context: vscode.ExtensionContext) {
     )
     ,
     // 快速选择并打开窗口（cmd+j cmd+w）
+    vscode.commands.registerCommand('vscode-window-tracker.openGitBranchQuickPick', () => {
+      void openGitBranchQuickPick(context);
+    }),
+
     vscode.commands.registerCommand('vscode-window-tracker.openQuickPick', async () => {
       const dm = provider.dataManager;
       const nodes = await dm.getWindowNodes();
@@ -258,10 +265,13 @@ export function activate(context: vscode.ExtensionContext) {
           else if (n.isSaved) iconPrefix = '$(star-full) ';
           else iconPrefix = '$(repo) ';
 
-          // description：[当前] · 相对时间 [· N 变更]
+          // description：[当前] · 相对时间 [· 分支名] [· N 变更]
           const descParts: string[] = [];
           if (isCurrent) descParts.push('[当前]');
           descParts.push(n.relativeActive);
+          if (n.currentBranch) {
+            descParts.push(`$(git-branch) ${n.currentBranch}`);
+          }
           if (n.recentChangedFiles && n.recentChangedFiles.length > 0) {
             descParts.push(`$(diff) ${n.recentChangedFiles.length} 变更`);
           }
@@ -434,6 +444,233 @@ export function activate(context: vscode.ExtensionContext) {
         );
         if (otherGroups.length > 0) {
           await vscode.window.tabGroups.close(otherGroups);
+        }
+      }
+    )
+  );
+
+  // ─── Git Branches TreeView ───
+  const gitSvc = new GitService();
+  const branchProvider = new GitBranchTreeProvider(context, gitSvc);
+  vscode.window.createTreeView('vscode-window-tracker.branchesView', {
+    treeDataProvider: branchProvider,
+    showCollapseAll: true,
+  });
+
+  // 监听活跃编辑器变化，切换仓库时自动刷新
+  let lastRepoRoot = '';
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveTextEditor(async () => {
+      const currentRoot = branchProvider.getRepoRoot();
+      if (currentRoot && currentRoot !== lastRepoRoot) {
+        lastRepoRoot = currentRoot;
+        await branchProvider.refresh();
+      }
+    })
+  );
+
+  // 启动定时刷新（10s）
+  const branchRefreshTimer = setInterval(() => {
+    void branchProvider.refresh();
+  }, 10_000);
+  context.subscriptions.push({ dispose: () => clearInterval(branchRefreshTimer) });
+
+  // 初次刷新
+  void branchProvider.refresh();
+
+  context.subscriptions.push(
+    // 刷新 Branches 视图
+    vscode.commands.registerCommand('vscode-window-tracker.refreshBranches', async () => {
+      await branchProvider.refresh();
+    }),
+
+    // 切换/检出分支（TreeView 节点点击触发）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.switchBranch',
+      async (node?: BranchItemNode) => {
+        if (!node || node.type !== 'branch') return;
+        const { info: branch, repoRoot } = node;
+
+        // merge/rebase 检查
+        const isMerging = await gitSvc.isMergeInProgress(repoRoot);
+        if (isMerging) {
+          void vscode.window.showWarningMessage(
+            '当前有合并/变基/拣选正在进行，请先完成或中止后再切换分支。'
+          );
+          return;
+        }
+
+        // 未提交更改确认
+        const hasChanges = await gitSvc.hasUncommittedChanges(repoRoot);
+        if (hasChanges) {
+          const choice = await vscode.window.showWarningMessage(
+            '工作区有未提交的更改，切换分支可能导致冲突。是否继续？',
+            '继续切换',
+            '取消'
+          );
+          if (choice !== '继续切换') return;
+        }
+
+        try {
+          if (branch.isRemote) {
+            await gitSvc.checkoutRemoteBranch(repoRoot, branch.name);
+            const localName = branch.name.replace(/^[^/]+\//, '');
+            void vscode.window.showInformationMessage(`已从 ${branch.name} 检出分支 ${localName}`);
+          } else if (branch.isCurrent) {
+            void vscode.window.showInformationMessage(`已在分支 ${branch.name} 上`);
+          } else {
+            await gitSvc.checkoutBranch(repoRoot, branch.name);
+            void vscode.window.showInformationMessage(`已切换到分支 ${branch.name}`);
+          }
+          await branchProvider.refresh();
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          if (branch.isRemote && msg.includes('already exists')) {
+            const localName = branch.name.replace(/^[^/]+\//, '');
+            void vscode.window.showWarningMessage(
+              `本地分支 ${localName} 已存在，请直接切换本地分支。`
+            );
+          } else {
+            void vscode.window.showErrorMessage(`切换分支失败: ${msg}`);
+          }
+        }
+      }
+    ),
+
+    // 新建分支（TreeView title / 右键菜单）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.createBranchFromTree',
+      async () => {
+        const repoRoot = branchProvider.getRepoRoot();
+        if (!repoRoot) {
+          void vscode.window.showWarningMessage('当前没有可用的 Git 仓库。');
+          return;
+        }
+
+        const name = await vscode.window.showInputBox({
+          prompt: '输入新分支名称',
+          validateInput: value => {
+            if (!value || !value.trim()) return '分支名称不能为空';
+            return null;
+          },
+        });
+        if (!name) return;
+
+        const isMerging = await gitSvc.isMergeInProgress(repoRoot);
+        if (isMerging) {
+          void vscode.window.showWarningMessage(
+            '当前有合并/变基/拣选正在进行，请先完成或中止后再新建分支。'
+          );
+          return;
+        }
+
+        const hasChanges = await gitSvc.hasUncommittedChanges(repoRoot);
+        if (hasChanges) {
+          const choice = await vscode.window.showWarningMessage(
+            '工作区有未提交的更改，新建分支可能携带这些更改。是否继续？',
+            '继续',
+            '取消'
+          );
+          if (choice !== '继续') return;
+        }
+
+        try {
+          await gitSvc.createBranch(repoRoot, name.trim());
+          void vscode.window.showInformationMessage(`已创建并切换到分支 ${name.trim()}`);
+          await branchProvider.refresh();
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `创建分支失败: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+    ),
+
+    // 基于指定分支新建分支（TreeView 行内按钮 / 右键菜单）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.createBranchFromBase',
+      async (node?: BranchItemNode) => {
+        if (!node || node.type !== 'branch' || node.info.isRemote) {
+          void vscode.window.showWarningMessage('请选择本地分支作为基础。');
+          return;
+        }
+
+        const { info: baseBranch, repoRoot } = node;
+        const name = await vscode.window.showInputBox({
+          prompt: `基于 ${baseBranch.name} 创建新分支`,
+          validateInput: value => {
+            if (!value || !value.trim()) return '分支名称不能为空';
+            return null;
+          },
+        });
+        if (!name) return;
+
+        const isMerging = await gitSvc.isMergeInProgress(repoRoot);
+        if (isMerging) {
+          void vscode.window.showWarningMessage(
+            '当前有合并/变基/拣选正在进行，请先完成或中止后再新建分支。'
+          );
+          return;
+        }
+
+        const hasChanges = await gitSvc.hasUncommittedChanges(repoRoot);
+        if (hasChanges) {
+          const choice = await vscode.window.showWarningMessage(
+            '工作区有未提交的更改，新建分支可能携带这些更改。是否继续？',
+            '继续',
+            '取消'
+          );
+          if (choice !== '继续') return;
+        }
+
+        try {
+          await gitSvc.createBranchFromBase(repoRoot, name.trim(), baseBranch.name);
+          void vscode.window.showInformationMessage(
+            `已基于 ${baseBranch.name} 创建并切换到分支 ${name.trim()}`
+          );
+          await branchProvider.refresh();
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `创建分支失败: ${err instanceof Error ? err.message : String(err)}`
+          );
+        }
+      }
+    ),
+
+    // 删除分支（TreeView 行内按钮 / 右键菜单）
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.deleteBranchFromTree',
+      async (node?: BranchItemNode) => {
+        if (!node || node.type !== 'branch' || node.info.isCurrent || node.info.isRemote) {
+          void vscode.window.showWarningMessage('无法删除当前分支或远程分支。');
+          return;
+        }
+
+        const { info: branch, repoRoot } = node;
+        const confirm = await vscode.window.showWarningMessage(
+          `确定要删除分支 ${branch.name} 吗？`,
+          { modal: true },
+          '删除'
+        );
+        if (confirm !== '删除') return;
+
+        try {
+          const result = await gitSvc.safeDeleteBranch(repoRoot, branch.name);
+          if (!result.success) {
+            void vscode.window.showErrorMessage(
+              `删除分支失败: ${result.error ?? '未知错误'}`
+            );
+            return;
+          }
+          const msg = result.forced
+            ? `已强制删除未合并分支 ${branch.name}`
+            : `已删除分支 ${branch.name}`;
+          void vscode.window.showInformationMessage(msg);
+          await branchProvider.refresh();
+        } catch (err) {
+          void vscode.window.showErrorMessage(
+            `删除分支失败: ${err instanceof Error ? err.message : String(err)}`
+          );
         }
       }
     )

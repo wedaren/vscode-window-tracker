@@ -335,6 +335,11 @@ export class DataManager {
         } catch {
           // 静默降级
         }
+        try {
+          node.currentBranch = await this.gitSvc.getCurrentBranch(root);
+        } catch {
+          // 静默降级
+        }
       })
     );
   }

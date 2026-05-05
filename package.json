@@ -38,6 +38,10 @@
         {
           "id": "vscode-window-tracker.editorsView",
           "name": "Editors"
+        },
+        {
+          "id": "vscode-window-tracker.branchesView",
+          "name": "Branches"
         }
       ]
     },
@@ -142,6 +146,11 @@
         "icon": "$(list-flat)"
       },
       {
+        "command": "vscode-window-tracker.openGitBranchQuickPick",
+        "title": "Git 分支切换（快速选择）",
+        "icon": "$(git-branch)"
+      },
+      {
         "command": "vscode-window-tracker.focusEditorTab",
         "title": "切换到此标签页",
         "icon": "$(go-to-file)"
@@ -160,6 +169,31 @@
         "command": "vscode-window-tracker.closeOtherEditorGroups",
         "title": "关闭其他编辑器组",
         "icon": "$(window)"
+      },
+      {
+        "command": "vscode-window-tracker.refreshBranches",
+        "title": "刷新分支列表",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vscode-window-tracker.switchBranch",
+        "title": "切换分支",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "vscode-window-tracker.createBranchFromTree",
+        "title": "新建分支",
+        "icon": "$(add)"
+      },
+      {
+        "command": "vscode-window-tracker.deleteBranchFromTree",
+        "title": "删除分支",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "vscode-window-tracker.createBranchFromBase",
+        "title": "基于该分支新建",
+        "icon": "$(add)"
       }
     ],
     "keybindings": [
@@ -171,6 +205,11 @@
       {
         "command": "vscode-window-tracker.openEditorsQuickPick",
         "mac": "cmd+j cmd+e",
+        "when": "isMac"
+      },
+      {
+        "command": "vscode-window-tracker.openGitBranchQuickPick",
+        "mac": "cmd+j cmd+b",
         "when": "isMac"
       }
     ],
@@ -220,6 +259,36 @@
           "command": "vscode-window-tracker.closeOtherEditorGroups",
           "when": "viewItem =~ /^editorGroupItem/ && view == vscode-window-tracker.editorsView",
           "group": "context@1"
+        },
+        {
+          "command": "vscode-window-tracker.switchBranch",
+          "when": "viewItem =~ /branchItem:(local|remote)/ && view == vscode-window-tracker.branchesView",
+          "group": "inline@1"
+        },
+        {
+          "command": "vscode-window-tracker.createBranchFromBase",
+          "when": "viewItem =~ /branchItem:(local|current)/ && view == vscode-window-tracker.branchesView",
+          "group": "inline@2"
+        },
+        {
+          "command": "vscode-window-tracker.deleteBranchFromTree",
+          "when": "viewItem == 'branchItem:local' && view == vscode-window-tracker.branchesView",
+          "group": "inline@3"
+        },
+        {
+          "command": "vscode-window-tracker.createBranchFromTree",
+          "when": "view == vscode-window-tracker.branchesView",
+          "group": "context@1"
+        },
+        {
+          "command": "vscode-window-tracker.createBranchFromBase",
+          "when": "viewItem =~ /branchItem:(local|current)/ && view == vscode-window-tracker.branchesView",
+          "group": "context@2"
+        },
+        {
+          "command": "vscode-window-tracker.deleteBranchFromTree",
+          "when": "viewItem == 'branchItem:local' && view == vscode-window-tracker.branchesView",
+          "group": "context@3"
         }
       ],
       "view/title": [
@@ -246,6 +315,16 @@
         {
           "command": "vscode-window-tracker.openEditorsQuickPick",
           "when": "view == vscode-window-tracker.editorsView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.refreshBranches",
+          "when": "view == vscode-window-tracker.branchesView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.createBranchFromTree",
+          "when": "view == vscode-window-tracker.branchesView",
           "group": "navigation"
         }
       ]

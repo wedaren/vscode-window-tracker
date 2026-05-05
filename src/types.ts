@@ -90,4 +90,6 @@ export interface WindowNode extends WindowRecord {
   pinned?: boolean;
   /** 通过 QuickPick 打开该窗口的累计次数，用于使用频率排序 */
   openCount?: number;
+  /** 当前检出的 git 分支名（非 git 仓库时为 undefined） */
+  currentBranch?: string;
 }
