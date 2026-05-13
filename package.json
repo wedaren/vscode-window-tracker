@@ -3,7 +3,7 @@
   "displayName": "vscode-window-tracker",
   "publisher": "wedaren",
   "description": "Track and manage VS Code workspace windows efficiently",
-  "version": "0.0.26",
+  "version": "0.0.27",
   "repository": {
     "type": "git",
     "url": "https://github.com/wedaren/vscode-window-tracker"
@@ -339,7 +339,6 @@
           "when": "view == vscode-window-tracker.branchesView",
           "group": "context@1"
         },
-
         {
           "command": "vscode-window-tracker.createBranchFromBase",
           "when": "viewItem =~ /branchItem:(local|current)/ && view == vscode-window-tracker.branchesView",
