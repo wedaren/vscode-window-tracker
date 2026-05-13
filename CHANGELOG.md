@@ -6,6 +6,20 @@ Check [Keep a Changelog](http://keepachangelog.com/) for recommendations on how 
 
 ## [Unreleased]
 
+## [0.0.26]
+
+### Added
+- **Views Navigator 视图导航系统** — TreeView + QuickPick 双入口
+  - TreeView 侧边栏 (`vscode-window-tracker.viewsNavigator`)：浏览、管理所有内置和扩展视图
+  - QuickPick 快速跳转 (`Cmd+J Cmd+V`)：模糊搜索，一键聚焦到任意视图
+  - **Pin 置顶**：TreeView 和 QuickPick 共享 `globalState` 状态，置顶项优先排在最前
+  - **Hide 隐藏**：隐藏项在 QuickPick 中不显示；TreeView title bar 可切换过滤模式查看已隐藏项
+  - **Note 备注**：为视图添加自定义备注，备注内容参与 QuickPick 搜索过滤
+  - **MRU 最近使用**：自动记录视图访问时间戳，显示相对时间（如"2分钟前"），排在置顶之后
+  - **重名处理**：同名视图在 description 中显示完整 viewId 和扩展名
+  - **扩展视图扫描**：遍历 `~/.vscode/extensions/*/package.json` 自动发现所有扩展贡献的视图
+  - 保留 `workbench.action.openView` 作为原生 fallback
+
 ## [0.0.21]
 
 ### Added
