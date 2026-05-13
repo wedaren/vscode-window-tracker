@@ -42,6 +42,10 @@
         {
           "id": "vscode-window-tracker.branchesView",
           "name": "Branches"
+        },
+        {
+          "id": "vscode-window-tracker.viewsNavigator",
+          "name": "Navigator"
         }
       ]
     },
@@ -151,6 +155,16 @@
         "icon": "$(git-branch)"
       },
       {
+        "command": "vscode-window-tracker.openViewsQuickPick",
+        "title": "切换视图（快速选择）",
+        "icon": "$(layout-sidebar-left)"
+      },
+      {
+        "command": "vscode-window-tracker.openViewsQuickPickExperimental",
+        "title": "切换视图（实验版 - 扫描所有扩展）",
+        "icon": "$(extensions)"
+      },
+      {
         "command": "vscode-window-tracker.focusEditorTab",
         "title": "切换到此标签页",
         "icon": "$(go-to-file)"
@@ -191,6 +205,46 @@
         "icon": "$(trash)"
       },
       {
+        "command": "vscode-window-tracker.refreshNavigator",
+        "title": "刷新视图列表",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "vscode-window-tracker.focusNavigatorView",
+        "title": "聚焦到此视图",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "vscode-window-tracker.pinNavigatorView",
+        "title": "置顶",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "vscode-window-tracker.unpinNavigatorView",
+        "title": "取消置顶",
+        "icon": "$(pinned)"
+      },
+      {
+        "command": "vscode-window-tracker.hideNavigatorView",
+        "title": "在 QuickPick 中隐藏",
+        "icon": "$(eye)"
+      },
+      {
+        "command": "vscode-window-tracker.showNavigatorView",
+        "title": "在 QuickPick 中显示",
+        "icon": "$(eye-closed)"
+      },
+      {
+        "command": "vscode-window-tracker.editNoteNavigatorView",
+        "title": "编辑备注",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "vscode-window-tracker.toggleFilterHiddenNavigator",
+        "title": "过滤已隐藏视图",
+        "icon": "$(eye-closed)"
+      },
+      {
         "command": "vscode-window-tracker.createBranchFromBase",
         "title": "基于该分支新建",
         "icon": "$(add)"
@@ -210,6 +264,11 @@
       {
         "command": "vscode-window-tracker.openGitBranchQuickPick",
         "mac": "cmd+j cmd+b",
+        "when": "isMac"
+      },
+      {
+        "command": "vscode-window-tracker.openViewsQuickPickExperimental",
+        "mac": "cmd+j cmd+v",
         "when": "isMac"
       }
     ],
@@ -280,6 +339,7 @@
           "when": "view == vscode-window-tracker.branchesView",
           "group": "context@1"
         },
+
         {
           "command": "vscode-window-tracker.createBranchFromBase",
           "when": "viewItem =~ /branchItem:(local|current)/ && view == vscode-window-tracker.branchesView",
@@ -289,6 +349,36 @@
           "command": "vscode-window-tracker.deleteBranchFromTree",
           "when": "viewItem == 'branchItem:local' && view == vscode-window-tracker.branchesView",
           "group": "context@3"
+        },
+        {
+          "command": "vscode-window-tracker.focusNavigatorView",
+          "when": "view == vscode-window-tracker.viewsNavigator && viewItem =~ /navigatorView/",
+          "group": "inline@1"
+        },
+        {
+          "command": "vscode-window-tracker.hideNavigatorView",
+          "when": "view == vscode-window-tracker.viewsNavigator && (viewItem == 'navigatorView' || viewItem == 'navigatorView:pinned' || viewItem == 'navigatorView:pinned:hidden')",
+          "group": "inline@2"
+        },
+        {
+          "command": "vscode-window-tracker.showNavigatorView",
+          "when": "view == vscode-window-tracker.viewsNavigator && (viewItem == 'navigatorView:hidden' || viewItem == 'navigatorView:pinned:hidden')",
+          "group": "inline@2"
+        },
+        {
+          "command": "vscode-window-tracker.pinNavigatorView",
+          "when": "view == vscode-window-tracker.viewsNavigator && (viewItem == 'navigatorView' || viewItem == 'navigatorView:hidden')",
+          "group": "inline@3"
+        },
+        {
+          "command": "vscode-window-tracker.unpinNavigatorView",
+          "when": "view == vscode-window-tracker.viewsNavigator && (viewItem == 'navigatorView:pinned' || viewItem == 'navigatorView:pinned:hidden')",
+          "group": "inline@3"
+        },
+        {
+          "command": "vscode-window-tracker.editNoteNavigatorView",
+          "when": "view == vscode-window-tracker.viewsNavigator && viewItem =~ /navigatorView/",
+          "group": "context@1"
         }
       ],
       "view/title": [
@@ -325,6 +415,16 @@
         {
           "command": "vscode-window-tracker.createBranchFromTree",
           "when": "view == vscode-window-tracker.branchesView",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.refreshNavigator",
+          "when": "view == vscode-window-tracker.viewsNavigator",
+          "group": "navigation"
+        },
+        {
+          "command": "vscode-window-tracker.toggleFilterHiddenNavigator",
+          "when": "view == vscode-window-tracker.viewsNavigator",
           "group": "navigation"
         }
       ]
