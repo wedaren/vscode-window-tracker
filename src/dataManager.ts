@@ -405,6 +405,10 @@ function getOriginalTitle(node: WindowNode): string {
 export function buildDescription(node: WindowNode): string {
   const parts: string[] = [];
 
+  if (node.pinned) {
+    parts.push('$(pinned) 置顶');
+  }
+
   if (typeof node.lastFileChangeMs === 'number') {
     const fileTime = toRelativeTime(node.lastFileChangeMs);
     // 只有与窗口活跃时间不同才追加，避免重复
@@ -470,14 +474,14 @@ export function buildTooltip(node: WindowNode): vscode.MarkdownString {
  * 已保存且配置了 keybinding 时附加 `:kb`，供右键“验证快捷键”命令使用。
  */
 export function buildContextValue(node: WindowNode): string {
+  const kb = node.keybinding ? ':kb' : '';
+  const pinned = node.pinned ? ':pinned' : '';
   if (node.origin === 'saved') {
-    const kb = node.keybinding ? ':kb' : '';
-    return `windowItem:saved${kb}`;
+    return `windowItem:saved${kb}${pinned}`;
   }
   if (node.origin === 'tracked') {
     if (node.isSaved) {
-      const kb = node.keybinding ? ':kb' : '';
-      return `windowItem:tracked:saved${kb}`;
+      return `windowItem:tracked:saved${kb}${pinned}`;
     }
     return 'windowItem:tracked:allowAdd';
   }

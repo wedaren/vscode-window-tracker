@@ -105,6 +105,16 @@
         "icon": "$(pencil)"
       },
       {
+        "command": "vscode-window-tracker.pinProject",
+        "title": "置顶",
+        "icon": "$(pin)"
+      },
+      {
+        "command": "vscode-window-tracker.unpinProject",
+        "title": "取消置顶",
+        "icon": "$(pinned)"
+      },
+      {
         "command": "vscode-window-tracker.removeProject",
         "title": "Remove Project",
         "icon": "$(trash)"
@@ -290,8 +300,18 @@
           "group": "inline@2"
         },
         {
+          "command": "vscode-window-tracker.pinProject",
+          "when": "viewItem =~ /windowItem:(saved|tracked:saved)(:kb)?(:current)?$/ && view == vscode-window-tracker.windowsView",
+          "group": "inline@2"
+        },
+        {
+          "command": "vscode-window-tracker.unpinProject",
+          "when": "viewItem =~ /windowItem:(saved|tracked:saved)(:kb)?:pinned(:current)?$/ && view == vscode-window-tracker.windowsView",
+          "group": "inline@2"
+        },
+        {
           "command": "vscode-window-tracker.removeProject",
-          "when": "viewItem == 'windowItem:saved' && view == vscode-window-tracker.windowsView",
+          "when": "viewItem =~ /windowItem:saved/ && !(viewItem =~ /:current$/) && view == vscode-window-tracker.windowsView",
           "group": "inline@1"
         },
         {

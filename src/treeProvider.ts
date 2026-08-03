@@ -72,6 +72,21 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
    * @docs editProjectByNode
    * 点击树节点后按步骤编辑展示名、基础颜色与置顶状态。
    */
+  public async togglePinByNode(node?: WindowNode, target?: boolean): Promise<void> {
+    if (!node || node.stableId === 'placeholder-no-data') {
+      return;
+    }
+
+    const savedId = this.dataManager.resolveNodeSavedId(node);
+    if (!savedId) {
+      return;
+    }
+
+    const next = target ?? !node.pinned;
+    await this.dataManager.togglePinnedTo(savedId, next);
+    void this.refresh(true);
+  }
+
   public async editProjectByNode(node?: WindowNode): Promise<void> {
     if (!node || node.stableId === 'placeholder-no-data') {
       return;
@@ -133,6 +148,7 @@ export class WindowTreeDataProvider implements vscode.TreeDataProvider<WindowNod
         relativeActive: item.relativeActive,
         path: item.path,
         title: item.title,
+        pinned: item.pinned,
       }))
     );
     if (force || hash !== this.lastHash) {

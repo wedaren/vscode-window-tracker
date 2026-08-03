@@ -91,6 +91,18 @@ export function activate(context: vscode.ExtensionContext) {
         await provider.editProjectByNode(item);
       }
     ),
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.pinProject',
+      async (item?: WindowNode) => {
+        await provider.togglePinByNode(item, true);
+      }
+    ),
+    vscode.commands.registerCommand(
+      'vscode-window-tracker.unpinProject',
+      async (item?: WindowNode) => {
+        await provider.togglePinByNode(item, false);
+      }
+    ),
     vscode.commands.registerCommand('vscode-window-tracker.openSavedJson', async () => {
       try {
         const cfg = ConfigService.getInstance();
@@ -272,8 +284,8 @@ export function activate(context: vscode.ExtensionContext) {
           // 图标前缀：当前 > 置顶 > 已保存 > 普通
           let iconPrefix: string;
           if (isCurrent) iconPrefix = '$(record) ';
-          else if (n.pinned) iconPrefix = '$(pin) ';
-          else if (n.isSaved) iconPrefix = '$(star-full) ';
+          else if (n.pinned) iconPrefix = '$(pinned) ';
+          else if (n.isSaved || n.origin === 'saved') iconPrefix = '$(star-full) ';
           else iconPrefix = '$(repo) ';
 
           // description：[当前] · 相对时间 [· 分支名] [· N 变更]
@@ -292,7 +304,8 @@ export function activate(context: vscode.ExtensionContext) {
           const detail = toLastTwoSegments(rawPath);
 
           // 已保存项可通过按钮切换置顶
-          const buttons: vscode.QuickInputButton[] = n.isSaved
+          const isSavedItem = n.isSaved || n.origin === 'saved';
+          const buttons: vscode.QuickInputButton[] = isSavedItem
             ? [{
                 iconPath: new vscode.ThemeIcon(n.pinned ? 'pinned' : 'pin'),
                 tooltip: n.pinned ? '取消置顶' : '置顶',
@@ -328,11 +341,20 @@ export function activate(context: vscode.ExtensionContext) {
         qp.onDidTriggerItemButton(async event => {
           const item = event.item;
           if (item._kind !== 'window' || !item.savedId) return;
-          const newPinned = await dm.togglePinned(item.savedId);
+          const toggledSavedId = item.savedId;
+          const newPinned = await dm.togglePinned(toggledSavedId);
           const updated = await dm.getWindowNodes();
           nodes.length = 0;
           nodes.push(...updated);
-          qp.items = buildItems();
+          const newItems = buildItems();
+          qp.items = newItems;
+          // 切换置顶后列表会重新排序，保持选中刚操作的项目，避免焦点漂移
+          const newActive = newItems.find(
+            i => i._kind === 'window' && i.savedId === toggledSavedId
+          );
+          if (newActive) {
+            qp.activeItems = [newActive];
+          }
           const name = item.nodeRef ? formatTitle(item.nodeRef) : item.savedId;
           void vscode.window.showInformationMessage(newPinned ? `已置顶：${name}` : `已取消置顶：${name}`);
         }),
