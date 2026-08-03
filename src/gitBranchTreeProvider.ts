@@ -232,14 +232,33 @@ export class GitBranchTreeProvider implements vscode.TreeDataProvider<BranchTree
     const current = branches.find(b => b.isCurrent);
     const others = branches.filter(b => !b.isCurrent);
 
-    const mruSet = new Set(mru);
-    const withMru = others.filter(b => mruSet.has(b.name));
-    const withoutMru = others.filter(b => !mruSet.has(b.name));
+    const mruIndex = new Map<string, number>();
+    mru.forEach((name, idx) => {
+      if (!mruIndex.has(name)) {
+        mruIndex.set(name, idx);
+      }
+    });
 
-    withMru.sort((a, b) => mru.indexOf(a.name) - mru.indexOf(b.name));
-    withoutMru.sort((a, b) => (b.lastCommitMs ?? 0) - (a.lastCommitMs ?? 0));
+    others.sort((a, b) => {
+      const timeDiff = (b.lastCommitMs ?? 0) - (a.lastCommitMs ?? 0);
+      if (timeDiff !== 0) {
+        return timeDiff;
+      }
+      const aMru = mruIndex.get(a.name);
+      const bMru = mruIndex.get(b.name);
+      if (aMru !== undefined && bMru !== undefined) {
+        return aMru - bMru;
+      }
+      if (aMru !== undefined) {
+        return -1;
+      }
+      if (bMru !== undefined) {
+        return 1;
+      }
+      return a.name.localeCompare(b.name);
+    });
 
-    const result = [...withMru, ...withoutMru];
+    const result = [...others];
     if (current) {
       result.unshift(current);
     }
