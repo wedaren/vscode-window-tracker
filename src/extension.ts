@@ -288,20 +288,24 @@ export function activate(context: vscode.ExtensionContext) {
           else if (n.isSaved || n.origin === 'saved') iconPrefix = '$(star-full) ';
           else iconPrefix = '$(repo) ';
 
-          // description：[当前] · 相对时间 [· 分支名] [· N 变更]
+          // label：有自定义名时只显示自定义名（原名见 detail 路径，避免重复）
+          const displayTitle = n.displayName || title;
+
+          // description：[当前] · 相对时间
           const descParts: string[] = [];
           if (isCurrent) descParts.push('[当前]');
           descParts.push(n.relativeActive);
+
+          // detail：路径末两段 [· 分支名] [· N 变更]
+          const rawPath = n.dirUri?.fsPath || n.path || '';
+          const detailParts: string[] = [toLastTwoSegments(rawPath)];
           if (n.currentBranch) {
-            descParts.push(`$(git-branch) ${n.currentBranch}`);
+            detailParts.push(`$(git-branch) ${n.currentBranch}`);
           }
           if (n.recentChangedFiles && n.recentChangedFiles.length > 0) {
-            descParts.push(`$(diff) ${n.recentChangedFiles.length} 变更`);
+            detailParts.push(`$(diff) ${n.recentChangedFiles.length} 变更`);
           }
-
-          // detail：路径末尾两段（简洁展示，便于扫视）
-          const rawPath = n.dirUri?.fsPath || n.path || '';
-          const detail = toLastTwoSegments(rawPath);
+          const detail = detailParts.join(' · ');
 
           // 已保存项可通过按钮切换置顶
           const isSavedItem = n.isSaved || n.origin === 'saved';
@@ -314,7 +318,7 @@ export function activate(context: vscode.ExtensionContext) {
 
           result.push({
             _kind: 'window',
-            label: `${iconPrefix}${title}`,
+            label: `${iconPrefix}${displayTitle}`,
             description: descParts.join(' · '),
             detail,
             stableId: n.stableId,
