@@ -9,11 +9,11 @@ import { buildKeybindingSnippet, isKeybindingRegistered, findKeybindingLocation 
 import { EditorTracker } from './editorTracker';
 import { openEditorsQuickPick, focusTab } from './editorsQuickPick';
 import { openGitBranchQuickPick } from './gitBranchQuickPick';
+import { openNativeViewsQuickPick } from './nativeViewsQuickPick';
 import { openViewsQuickPick } from './viewsQuickPick';
-import { openViewsQuickPickExperimental } from './viewsQuickPickExperimental';
 import { EditorsTreeProvider, EditorTabNode, EditorGroupNode } from './editorsTreeProvider';
 import { GitBranchTreeProvider, BranchItemNode } from './gitBranchTreeProvider';
-import { ViewsNavigatorTreeProvider, ViewNode } from './viewsNavigatorTreeProvider';
+import { ViewsTreeProvider, ViewNode } from './viewsTreeProvider';
 import { GitService } from './gitService';
 
 let dataManager: ReturnType<typeof createDataManager> | undefined;
@@ -218,12 +218,12 @@ export function activate(context: vscode.ExtensionContext) {
       void openGitBranchQuickPick(context);
     }),
 
-    vscode.commands.registerCommand('vscode-window-tracker.openViewsQuickPick', () => {
-      openViewsQuickPick();
+    vscode.commands.registerCommand('vscode-window-tracker.openNativeViewsQuickPick', () => {
+      openNativeViewsQuickPick();
     }),
 
-    vscode.commands.registerCommand('vscode-window-tracker.openViewsQuickPickExperimental', () => {
-      void openViewsQuickPickExperimental(context);
+    vscode.commands.registerCommand('vscode-window-tracker.openViewsQuickPick', () => {
+      void openViewsQuickPick(context);
     }),
 
     vscode.commands.registerCommand('vscode-window-tracker.openQuickPick', async () => {
@@ -713,29 +713,29 @@ export function activate(context: vscode.ExtensionContext) {
     )
   );
 
-  // ─── Views Navigator TreeView ───
-  const navigatorProvider = new ViewsNavigatorTreeProvider(context);
-  const navigatorTreeView = vscode.window.createTreeView('vscode-window-tracker.viewsNavigator', {
-    treeDataProvider: navigatorProvider,
+  // ─── Views TreeView ───
+  const viewsProvider = new ViewsTreeProvider(context);
+  const viewsTreeView = vscode.window.createTreeView('vscode-window-tracker.viewsView', {
+    treeDataProvider: viewsProvider,
     showCollapseAll: true,
   });
 
   // 根据过滤状态动态更新 title
-  function updateNavigatorTitle() {
-    const filtering = navigatorProvider.isFilterHidden();
-    navigatorTreeView.description = filtering ? '仅显示已隐藏' : undefined;
+  function updateViewsTitle() {
+    const filtering = viewsProvider.isFilterHidden();
+    viewsTreeView.description = filtering ? '仅显示已隐藏' : undefined;
   }
 
   // 初次加载
-  void navigatorProvider.refresh().then(updateNavigatorTitle);
+  void viewsProvider.refresh().then(updateViewsTitle);
 
   context.subscriptions.push(
-    vscode.commands.registerCommand('vscode-window-tracker.refreshNavigator', async () => {
-      await navigatorProvider.refresh();
+    vscode.commands.registerCommand('vscode-window-tracker.refreshViews', async () => {
+      await viewsProvider.refresh();
     }),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.focusNavigatorView',
+      'vscode-window-tracker.focusView',
       async (node?: ViewNode) => {
         if (!node || node.type !== 'view') return;
         const viewId = node.viewDef.id;
@@ -748,59 +748,59 @@ export function activate(context: vscode.ExtensionContext) {
     ),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.pinNavigatorView',
+      'vscode-window-tracker.pinView',
       async (node?: ViewNode) => {
         if (!node || node.type !== 'view') return;
-        await navigatorProvider.togglePin(node.viewDef.id);
+        await viewsProvider.togglePin(node.viewDef.id);
       }
     ),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.unpinNavigatorView',
+      'vscode-window-tracker.unpinView',
       async (node?: ViewNode) => {
         if (!node || node.type !== 'view') return;
-        await navigatorProvider.togglePin(node.viewDef.id);
+        await viewsProvider.togglePin(node.viewDef.id);
       }
     ),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.hideNavigatorView',
+      'vscode-window-tracker.hideView',
       async (node?: ViewNode) => {
         if (!node || node.type !== 'view') return;
-        await navigatorProvider.toggleHidden(node.viewDef.id);
+        await viewsProvider.toggleHidden(node.viewDef.id);
       }
     ),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.showNavigatorView',
+      'vscode-window-tracker.showView',
       async (node?: ViewNode) => {
         if (!node || node.type !== 'view') return;
-        await navigatorProvider.toggleHidden(node.viewDef.id);
+        await viewsProvider.toggleHidden(node.viewDef.id);
       }
     ),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.editNoteNavigatorView',
+      'vscode-window-tracker.editViewNote',
       async (node?: ViewNode) => {
         if (!node || node.type !== 'view') return;
-        const currentNote = navigatorProvider.getNotes()[node.viewDef.id] || '';
+        const currentNote = viewsProvider.getNotes()[node.viewDef.id] || '';
         const note = await vscode.window.showInputBox({
           prompt: `为 ${node.viewDef.name} 添加备注`,
           value: currentNote,
           placeHolder: '输入备注，留空清除',
         });
         if (note === undefined) return;
-        await navigatorProvider.setNote(node.viewDef.id, note.trim());
+        await viewsProvider.setNote(node.viewDef.id, note.trim());
         const msg = note.trim() ? `已添加备注：${note.trim()}` : '已清除备注';
         void vscode.window.showInformationMessage(msg);
       }
     ),
 
     vscode.commands.registerCommand(
-      'vscode-window-tracker.toggleFilterHiddenNavigator',
+      'vscode-window-tracker.toggleViewsHiddenFilter',
       async () => {
-        const nowFiltering = await navigatorProvider.toggleFilterHidden();
-        updateNavigatorTitle();
+        const nowFiltering = await viewsProvider.toggleFilterHidden();
+        updateViewsTitle();
         void vscode.window.showInformationMessage(
           nowFiltering ? '已过滤：仅显示已隐藏的视图' : '已恢复：显示所有视图'
         );

@@ -3,6 +3,7 @@ import * as fs from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
+// globalState 键沿用旧的 viewsNavigator 前缀，保证已存数据（置顶/隐藏/备注/过滤状态）不丢失
 const PINNED_KEY = 'viewsNavigator:pinned';
 const HIDDEN_KEY = 'viewsNavigator:hidden';
 const NOTES_KEY = 'viewsNavigator:notes';
@@ -31,7 +32,7 @@ export type ViewNode = {
   isHidden: boolean;
 };
 
-export type NavigatorNode = GroupNode | ViewNode;
+export type ViewsNode = GroupNode | ViewNode;
 
 // ─── 内置视图 ───
 
@@ -48,8 +49,8 @@ const BUILTIN_VIEWS: ViewDef[] = [
 
 // ─── Provider ───
 
-export class ViewsNavigatorTreeProvider implements vscode.TreeDataProvider<NavigatorNode> {
-  private readonly _onDidChangeTreeData = new vscode.EventEmitter<NavigatorNode | undefined>();
+export class ViewsTreeProvider implements vscode.TreeDataProvider<ViewsNode> {
+  private readonly _onDidChangeTreeData = new vscode.EventEmitter<ViewsNode | undefined>();
   readonly onDidChangeTreeData = this._onDidChangeTreeData.event;
 
   private allViews: ViewDef[] = [];
@@ -124,14 +125,14 @@ export class ViewsNavigatorTreeProvider implements vscode.TreeDataProvider<Navig
 
   // ─── TreeDataProvider ───
 
-  getTreeItem(element: NavigatorNode): vscode.TreeItem {
+  getTreeItem(element: ViewsNode): vscode.TreeItem {
     if (element.type === 'group') {
       return this._buildGroupItem(element);
     }
     return this._buildViewItem(element);
   }
 
-  getChildren(element?: NavigatorNode): NavigatorNode[] {
+  getChildren(element?: ViewsNode): ViewsNode[] {
     if (!element) {
       return this._buildRootGroups();
     }
@@ -326,14 +327,14 @@ export class ViewsNavigatorTreeProvider implements vscode.TreeDataProvider<Navig
     item.tooltip = new vscode.MarkdownString(tooltipParts.join('  \n'));
 
     // Context value 驱动行内按钮
-    const parts = ['navigatorView'];
+    const parts = ['viewsItem'];
     if (node.isPinned) parts.push('pinned');
     if (node.isHidden) parts.push('hidden');
     item.contextValue = parts.join(':');
 
     // 单击整行即聚焦该视图（与行内 reveal 按钮同一命令）
     item.command = {
-      command: 'vscode-window-tracker.focusNavigatorView',
+      command: 'vscode-window-tracker.focusView',
       title: '聚焦视图',
       arguments: [node],
     };
