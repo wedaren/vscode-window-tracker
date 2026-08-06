@@ -296,14 +296,7 @@ export class ViewsNavigatorTreeProvider implements vscode.TreeDataProvider<Navig
     const v = node.viewDef;
     const hasDup = this.duplicateNames.has(v.name);
 
-    // 状态标记前缀（ pinned + hidden 图标）
-    const statePrefix: string[] = [];
-    if (node.isPinned) statePrefix.push('$(pinned)');
-    if (node.isHidden) statePrefix.push('$(eye-closed)');
-    const prefix = statePrefix.length > 0 ? `${statePrefix.join(' ')} ` : '';
-
-    const label = `${prefix}${v.name}`;
-    const item = new vscode.TreeItem(label, vscode.TreeItemCollapsibleState.None);
+    const item = new vscode.TreeItem(v.name, vscode.TreeItemCollapsibleState.None);
     item.id = `view:${v.id}`;
 
     // 图标
@@ -313,8 +306,11 @@ export class ViewsNavigatorTreeProvider implements vscode.TreeDataProvider<Navig
       item.iconPath = new vscode.ThemeIcon('window');
     }
 
-    // Description：重名 viewId + 扩展名 + 备注
+    // Description：状态标记 + 重名 viewId + 扩展名 + 备注
+    // 注意：TreeView 的 label/description 不渲染 $(icon) codicon 语法，状态用 emoji 表示
     const descParts: string[] = [];
+    if (node.isPinned) descParts.push('📌');
+    if (node.isHidden) descParts.push('🙈');
     if (hasDup) descParts.push(v.id);
     if (v.extension && !BUILTIN_VIEWS.some(b => b.id === v.id)) descParts.push(v.extension);
     const note = this.getNotes()[v.id];
@@ -334,6 +330,13 @@ export class ViewsNavigatorTreeProvider implements vscode.TreeDataProvider<Navig
     if (node.isPinned) parts.push('pinned');
     if (node.isHidden) parts.push('hidden');
     item.contextValue = parts.join(':');
+
+    // 单击整行即聚焦该视图（与行内 reveal 按钮同一命令）
+    item.command = {
+      command: 'vscode-window-tracker.focusNavigatorView',
+      title: '聚焦视图',
+      arguments: [node],
+    };
 
     return item;
   }

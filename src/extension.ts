@@ -736,8 +736,9 @@ export function activate(context: vscode.ExtensionContext) {
 
     vscode.commands.registerCommand(
       'vscode-window-tracker.focusNavigatorView',
-      async (viewId?: string) => {
-        if (!viewId) return;
+      async (node?: ViewNode) => {
+        if (!node || node.type !== 'view') return;
+        const viewId = node.viewDef.id;
         try {
           await vscode.commands.executeCommand(`${viewId}.focus`);
         } catch {
