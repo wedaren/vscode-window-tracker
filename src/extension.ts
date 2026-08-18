@@ -281,15 +281,19 @@ export function activate(context: vscode.ExtensionContext) {
           const isCurrent = isCurrentWorkspace(n.path, n.uri);
           const title = formatTitle(n);
 
-          // 图标前缀：当前 > 置顶 > 已保存 > 普通
-          let iconPrefix: string;
-          if (isCurrent) iconPrefix = '$(record) ';
-          else if (n.pinned) iconPrefix = '$(pinned) ';
-          else if (n.isSaved || n.origin === 'saved') iconPrefix = '$(star-full) ';
-          else iconPrefix = '$(repo) ';
+          // 图标只表达属性，优先级：当前 > 置顶 > 已保存 > 普通
+          // 在线状态由 label 前的小圆点统一表达，不与图标语义重复
+          const isOnline = n.origin === 'tracked' || isCurrent;
+          let iconId: string;
+          if (isCurrent) iconId = 'record';
+          else if (n.pinned) iconId = 'pinned';
+          else if (n.isSaved || n.origin === 'saved') iconId = 'star-empty';
+          else iconId = 'repo';
+          const iconPath = new vscode.ThemeIcon(iconId);
 
           // label：有自定义名时只显示自定义名（原名见 detail 路径，避免重复）
-          const displayTitle = n.displayName || title;
+          // 在线窗口前缀小圆点标识（单色 codicon，比彩色 emoji 更弱不抢眼）
+          const displayTitle = `${isOnline ? '$(circle-filled) ' : ''}${n.displayName || title}`;
 
           // description：[当前] · 相对时间
           const descParts: string[] = [];
@@ -318,9 +322,10 @@ export function activate(context: vscode.ExtensionContext) {
 
           result.push({
             _kind: 'window',
-            label: `${iconPrefix}${displayTitle}`,
+            label: displayTitle,
             description: descParts.join(' · '),
             detail,
+            iconPath,
             stableId: n.stableId,
             nodeRef: n,
             isCurrent,
